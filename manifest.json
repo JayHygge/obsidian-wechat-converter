@@ -1,0 +1,10 @@
+{
+	"id": "apple-style-formatter",
+	"name": "Apple Style Formatter",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "优雅的苹果风格 Markdown 排版工具，提供极简设计、完美间距和精美预览",
+	"author": "Your Name",
+	"authorUrl": "https://github.com/yourname",
+	"isDesktopOnly": false
+}

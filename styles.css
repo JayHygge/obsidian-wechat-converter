@@ -1,0 +1,619 @@
+/**
+ * 🍎 Apple Style Formatter - 样式表
+ * 极简、优雅、专业的苹果风格排版
+ */
+
+/* ========================================
+   全局变量 - 苹果配色系统
+   ======================================== */
+:root {
+  /* 核心配色 */
+  --apple-primary: #1d1d1f;
+  --apple-secondary: #6e6e73;
+  --apple-tertiary: #86868b;
+  --apple-background: #ffffff;
+  --apple-surface: #f5f5f7;
+
+  /* 强调色 */
+  --apple-accent: #0071e3;
+  --apple-accent-hover: #0077ed;
+
+  /* 语义色 */
+  --apple-success: #34c759;
+  --apple-warning: #ff9500;
+  --apple-error: #ff3b30;
+
+  /* 代码配色 */
+  --apple-code-text: #c7254e;
+  --apple-code-bg: #f5f5f7;
+  --apple-code-block-bg: #fafafa;
+  --apple-code-block-border: #e8e8ed;
+
+  /* 边框和分隔线 */
+  --apple-divider: #d2d2d7;
+  --apple-border: #e8e8ed;
+
+  /* 间距 */
+  --apple-spacing-xs: 4px;
+  --apple-spacing-sm: 8px;
+  --apple-spacing-md: 16px;
+  --apple-spacing-lg: 24px;
+  --apple-spacing-xl: 32px;
+  --apple-spacing-xxl: 48px;
+
+  /* 圆角 */
+  --apple-radius-sm: 4px;
+  --apple-radius-md: 8px;
+  --apple-radius-lg: 12px;
+  --apple-radius-xl: 16px;
+
+  /* 字体 */
+  --apple-font-text: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif;
+  --apple-font-code: 'SF Mono', 'Menlo', Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  --apple-font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* ========================================
+   视图容器
+   ======================================== */
+.apple-style-view-container,
+.apple-converter-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--apple-background);
+}
+
+/* ========================================
+   工具栏
+   ======================================== */
+.apple-style-toolbar,
+.apple-converter-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--apple-spacing-md);
+  border-bottom: 1px solid var(--apple-border);
+  background: var(--apple-background);
+}
+
+.apple-converter-title-area {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.apple-style-toolbar-title,
+.apple-converter-title {
+  font-family: var(--apple-font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--apple-primary);
+}
+
+.apple-current-doc {
+  font-family: var(--apple-font-text);
+  font-size: 12px;
+  color: var(--apple-tertiary);
+}
+
+.apple-style-btn-group,
+.apple-converter-btns {
+  display: flex;
+  gap: var(--apple-spacing-sm);
+  align-items: center;
+}
+
+.apple-style-size-selector,
+.apple-size-select {
+  padding: 6px 12px;
+  border: 1px solid var(--apple-border);
+  border-radius: var(--apple-radius-sm);
+  background: var(--apple-background);
+  color: var(--apple-primary);
+  font-family: var(--apple-font-text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.apple-style-size-selector:hover,
+.apple-size-select:hover {
+  border-color: var(--apple-accent);
+}
+
+.apple-style-size-selector:focus,
+.apple-size-select:focus {
+  outline: none;
+  border-color: var(--apple-accent);
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.1);
+}
+
+.apple-style-btn,
+.apple-btn {
+  padding: 6px 16px;
+  border: 1px solid var(--apple-border);
+  border-radius: var(--apple-radius-sm);
+  background: var(--apple-background);
+  color: var(--apple-primary);
+  font-family: var(--apple-font-text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.apple-style-btn:hover,
+.apple-btn:hover {
+  background: var(--apple-surface);
+  border-color: var(--apple-accent);
+}
+
+.apple-style-btn:active,
+.apple-btn:active {
+  transform: scale(0.98);
+}
+
+.apple-style-btn-primary,
+.apple-btn-copy {
+  background: var(--apple-accent);
+  color: white;
+  border-color: var(--apple-accent);
+}
+
+.apple-style-btn-primary:hover,
+.apple-btn-copy:hover {
+  background: var(--apple-accent-hover);
+  border-color: var(--apple-accent-hover);
+}
+
+.apple-btn-convert {
+  background: var(--apple-success);
+  color: white;
+  border-color: var(--apple-success);
+}
+
+.apple-btn-convert:hover {
+  opacity: 0.9;
+}
+
+/* ========================================
+   预览区域
+   ======================================== */
+.apple-style-preview-area,
+.apple-converter-preview {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--apple-spacing-lg);
+  background: var(--apple-background);
+}
+
+/* ========================================
+   占位符
+   ======================================== */
+.apple-style-placeholder,
+.apple-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  color: var(--apple-secondary);
+}
+
+.apple-style-placeholder-icon,
+.apple-placeholder-icon {
+  font-size: 64px;
+  margin-bottom: var(--apple-spacing-lg);
+}
+
+.apple-style-placeholder h2,
+.apple-placeholder h2 {
+  font-family: var(--apple-font-display);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--apple-primary);
+  margin: 0 0 var(--apple-spacing-md) 0;
+}
+
+.apple-style-placeholder p,
+.apple-placeholder p {
+  font-size: 15px;
+  color: var(--apple-secondary);
+  margin: 0 0 var(--apple-spacing-xl) 0;
+}
+
+.apple-style-steps,
+.apple-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--apple-spacing-sm);
+  align-items: flex-start;
+  padding: var(--apple-spacing-lg);
+  background: var(--apple-surface);
+  border-radius: var(--apple-radius-md);
+}
+
+.apple-style-steps div,
+.apple-steps div {
+  font-size: 14px;
+  color: var(--apple-primary);
+}
+
+/* ========================================
+   内容样式 - 小号
+   ======================================== */
+.apple-style-content[data-font-size="small"] {
+  font-size: 14px;
+}
+
+.apple-style-content[data-font-size="small"] .apple-style h1 {
+  font-size: 22px;
+}
+
+.apple-style-content[data-font-size="small"] .apple-style h2 {
+  font-size: 18px;
+}
+
+.apple-style-content[data-font-size="small"] .apple-style h3 {
+  font-size: 16px;
+}
+
+.apple-style-content[data-font-size="small"] .apple-style h4 {
+  font-size: 16px;
+}
+
+.apple-style-content[data-font-size="small"] .apple-style code {
+  font-size: 12px;
+}
+
+.apple-style-content[data-font-size="small"] .apple-style figcaption {
+  font-size: 12px;
+}
+
+/* ========================================
+   内容样式 - 中号（默认）
+   ======================================== */
+.apple-style-content[data-font-size="medium"] {
+  font-size: 16px;
+}
+
+.apple-style-content[data-font-size="medium"] .apple-style h1 {
+  font-size: 28px;
+}
+
+.apple-style-content[data-font-size="medium"] .apple-style h2 {
+  font-size: 21px;
+}
+
+.apple-style-content[data-font-size="medium"] .apple-style h3 {
+  font-size: 18px;
+}
+
+.apple-style-content[data-font-size="medium"] .apple-style h4 {
+  font-size: 17px;
+}
+
+.apple-style-content[data-font-size="medium"] .apple-style code {
+  font-size: 14px;
+}
+
+/* ========================================
+   内容样式 - 大号
+   ======================================== */
+.apple-style-content[data-font-size="large"] {
+  font-size: 18px;
+}
+
+.apple-style-content[data-font-size="large"] .apple-style h1 {
+  font-size: 32px;
+}
+
+.apple-style-content[data-font-size="large"] .apple-style h2 {
+  font-size: 24px;
+}
+
+.apple-style-content[data-font-size="large"] .apple-style h3 {
+  font-size: 20px;
+}
+
+.apple-style-content[data-font-size="large"] .apple-style h4 {
+  font-size: 19px;
+}
+
+.apple-style-content[data-font-size="large"] .apple-style code {
+  font-size: 16px;
+}
+
+/* ========================================
+   Apple 风格内容
+   ======================================== */
+.apple-style {
+  font-family: var(--apple-font-text);
+  line-height: 1.8;
+  color: var(--apple-primary);
+  max-width: 100%;
+  word-wrap: break-word;
+}
+
+/* 标题系列 - 优化后的三级标题系统 */
+/* H1 - 主要章节（28px, 700粗体, 灰色下划线）*/
+.apple-style h1 {
+  font-family: var(--apple-font-text);
+  font-weight: 700;
+  color: var(--apple-primary);
+  line-height: 1.4;
+  letter-spacing: -0.3px;
+  margin: var(--apple-spacing-xxl) 0 var(--apple-spacing-lg) 0;
+  padding: 0 0 var(--apple-spacing-sm) 0;
+  border-bottom: 1px solid var(--apple-divider);
+}
+
+/* H2 - 次级章节（21px, 600中粗, 深灰左边框）*/
+.apple-style h2 {
+  font-family: var(--apple-font-text);
+  font-weight: 600;
+  color: var(--apple-primary);
+  line-height: 1.5;
+  letter-spacing: -0.2px;
+  margin: var(--apple-spacing-xl) 0 var(--apple-spacing-md) 0;
+  padding: 0 0 0 var(--apple-spacing-md);
+  border-left: 3px solid var(--apple-secondary);
+}
+
+/* H3 - 小节标题（18px, 500中等, 无装饰）*/
+.apple-style h3 {
+  font-family: var(--apple-font-text);
+  font-weight: 500;
+  color: var(--apple-primary);
+  line-height: 1.6;
+  margin: var(--apple-spacing-lg) 0 12px 0;
+  padding: 0;
+}
+
+/* 段落 - 书籍风格 */
+.apple-style p {
+  line-height: 1.8;
+  color: var(--apple-primary);
+  margin: 0 0 12px 0;
+  padding: 0;
+  letter-spacing: 0.02em;
+}
+
+/* 标题后的段落 - 紧凑（利用标题的下边距） */
+.apple-style h1 + p,
+.apple-style h2 + p,
+.apple-style h3 + p {
+  margin-top: 0;
+}
+
+/* 列表、引用、代码块后的段落 - 增加呼吸感 */
+.apple-style ul + p,
+.apple-style ol + p,
+.apple-style blockquote + p,
+.apple-style pre + p {
+  margin-top: 8px;
+}
+
+/* 引用块 */
+.apple-style blockquote {
+  line-height: 1.8;
+  color: var(--apple-secondary);
+  background: var(--apple-surface);
+  margin: var(--apple-spacing-md) 0;
+  padding: var(--apple-spacing-md) var(--apple-spacing-lg);
+  border-left: 3px solid var(--apple-divider);
+  border-radius: 0 var(--apple-radius-sm) var(--apple-radius-sm) 0;
+}
+
+.apple-style blockquote p:last-child {
+  padding-bottom: 0;
+}
+
+/* 代码 */
+.apple-style pre {
+  background: var(--apple-code-block-bg);
+  border: 1px solid var(--apple-code-block-border);
+  border-radius: var(--apple-radius-md);
+  padding: var(--apple-spacing-md) var(--apple-spacing-lg);
+  margin: var(--apple-spacing-md) 0;
+  overflow-x: auto;
+  font-family: var(--apple-font-code);
+  line-height: 1.6;
+  color: var(--apple-primary);
+}
+
+.apple-style code {
+  background: var(--apple-code-bg);
+  color: var(--apple-code-text);
+  padding: 2px 6px;
+  border-radius: var(--apple-radius-sm);
+  font-family: var(--apple-font-code);
+  font-weight: 500;
+}
+
+.apple-style pre code {
+  background: none;
+  color: inherit;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* 列表 */
+.apple-style ul,
+.apple-style ol {
+  margin: var(--apple-spacing-sm) 0;
+  padding-left: var(--apple-spacing-lg);
+}
+
+.apple-style li {
+  line-height: 1.8;
+  color: var(--apple-primary);
+  margin: 0;
+  padding: 0 0 var(--apple-spacing-sm) 0;
+}
+
+.apple-style li:last-child {
+  padding-bottom: 0;
+}
+
+/* 图片容器（灰色边框）*/
+.apple-style figure {
+  border: 2px solid var(--apple-divider);
+  border-radius: var(--apple-radius-md);
+  padding: var(--apple-spacing-md);
+  margin: var(--apple-spacing-md) 0;
+  background: var(--apple-background);
+}
+
+/* 图片标题（左对齐）*/
+.apple-style figcaption {
+  font-size: 13px;
+  color: var(--apple-secondary);
+  text-align: left;
+  margin: 0 0 var(--apple-spacing-sm) 0;
+  padding: 0;
+  font-weight: 500;
+}
+
+/* 图片 */
+.apple-style img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--apple-radius-sm);
+  margin: 0;
+  display: block;
+}
+
+/* 链接 */
+.apple-style a {
+  color: var(--apple-accent);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.apple-style a:hover {
+  color: var(--apple-accent-hover);
+  text-decoration: underline;
+}
+
+/* 表格 */
+.apple-style table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--apple-spacing-md) 0;
+}
+
+.apple-style thead {
+  background: var(--apple-surface);
+}
+
+.apple-style th {
+  padding: var(--apple-spacing-sm) var(--apple-spacing-md);
+  text-align: left;
+  font-weight: 600;
+  color: var(--apple-primary);
+  border-bottom: 2px solid var(--apple-divider);
+}
+
+.apple-style td {
+  padding: var(--apple-spacing-sm) var(--apple-spacing-md);
+  color: var(--apple-primary);
+  border-bottom: 1px solid var(--apple-border);
+}
+
+.apple-style tr:last-child td {
+  border-bottom: none;
+}
+
+/* 分隔线 - 书籍分段标记（不可见，仅产生间距） */
+.apple-style hr {
+  border: none !important;
+  border-top: none !important;
+  height: 0 !important;
+  margin: 24px 0 !important;
+  opacity: 0 !important;
+  background: none !important;
+}
+
+/* 强调 */
+.apple-style strong {
+  font-weight: 600;
+  color: var(--apple-primary);
+}
+
+.apple-style em {
+  font-style: italic;
+  color: var(--apple-secondary);
+}
+
+.apple-style mark {
+  background: #ffec99;
+  color: var(--apple-primary);
+  padding: 2px 4px;
+  border-radius: var(--apple-radius-sm);
+}
+
+.apple-style del {
+  color: var(--apple-tertiary);
+  text-decoration: line-through;
+}
+
+/* ========================================
+   设置面板
+   ======================================== */
+.apple-style-info {
+  padding: var(--apple-spacing-md);
+  background: var(--apple-surface);
+  border-radius: var(--apple-radius-md);
+  margin-top: var(--apple-spacing-md);
+}
+
+.apple-style-info p {
+  margin: 0;
+  padding: var(--apple-spacing-xs) 0;
+  color: var(--apple-secondary);
+  font-size: 13px;
+}
+
+/* ========================================
+   响应式设计
+   ======================================== */
+@media (max-width: 768px) {
+  .apple-style-toolbar {
+    flex-direction: column;
+    gap: var(--apple-spacing-sm);
+    align-items: stretch;
+  }
+
+  .apple-style-btn-group {
+    justify-content: space-between;
+  }
+
+  .apple-style-preview-area {
+    padding: var(--apple-spacing-md);
+  }
+}
+
+/* ========================================
+   打印样式
+   ======================================== */
+@media print {
+  .apple-style-toolbar {
+    display: none;
+  }
+
+  .apple-style-preview-area {
+    padding: 0;
+  }
+
+  .apple-style {
+    color: #000;
+  }
+
+  .apple-style a {
+    color: #000;
+    text-decoration: underline;
+  }
+}
