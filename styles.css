@@ -7,7 +7,7 @@
    全局变量 - 苹果配色系统
    ======================================== */
 :root {
-  /* 核心配色 */
+  /* 核心配色 (Light Mode) */
   --apple-primary: #1d1d1f;
   --apple-secondary: #6e6e73;
   --apple-tertiary: #86868b;
@@ -52,6 +52,26 @@
 }
 
 /* ========================================
+   深色模式适配 (Dark Mode)
+   ======================================== */
+.theme-dark {
+  --apple-primary: #dcddde;
+  --apple-secondary: #b3b3b3;
+  --apple-tertiary: #5c5c5c;
+  --apple-background: var(--background-primary);
+  --apple-surface: var(--background-secondary);
+  --apple-border: var(--background-modifier-border);
+  --apple-divider: var(--background-modifier-border);
+  --apple-accent: var(--interactive-accent);
+  --apple-accent-hover: var(--interactive-accent-hover);
+
+  --apple-code-text: #ff6b6b;
+  --apple-code-bg: #2d2d2d;
+  --apple-code-block-bg: #1e1e1e;
+  --apple-code-block-border: #333;
+}
+
+/* ========================================
    视图容器
    ======================================== */
 .apple-converter-container {
@@ -60,6 +80,7 @@
   height: 100%;
   background: var(--apple-background);
   font-family: var(--apple-font-text);
+  color: var(--apple-primary);
 }
 
 /* ========================================
@@ -307,7 +328,9 @@
 
 /* === 下拉选择器 === */
 .apple-select {
-  width: 100%;
+  width: auto;
+  min-width: 80px;
+  max-width: 120px;
   padding: 6px 28px 6px 10px;
   border: 1px solid var(--apple-border);
   border-radius: var(--apple-radius-sm);
@@ -442,7 +465,16 @@
   overflow-y: auto;
   overflow-x: hidden;
   padding: var(--apple-spacing-lg);
-  background: var(--apple-background);
+  background: #ffffff;
+  /* 强制浅色背景，模拟微信效果 */
+  color: #1d1d1f;
+  /* 强制深色文字 */
+  border-radius: var(--apple-radius-md);
+  /* 增加圆角 */
+  margin: var(--apple-spacing-md);
+  /* 增加外边距 */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  /* 增加阴影，使其像一张纸 */
 }
 
 /* ========================================
