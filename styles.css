@@ -327,6 +327,7 @@
 }
 
 /* === 下拉选择器 === */
+/* === 下拉选择器 === */
 .apple-select {
   width: auto;
   min-width: 80px;
@@ -349,7 +350,19 @@
   background-size: 12px;
 }
 
+.theme-dark .apple-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23b3b3b3' d='M2.5 4.5L6 8l3.5-3.5'/%3E%3C/svg%3E");
+  background-color: #2c2c2e;
+  /* 明确的深色背景 */
+  border-color: #424244;
+  color: #dcddde;
+}
+
 .apple-select:hover {
+  border-color: var(--apple-accent);
+}
+
+.theme-dark .apple-select:hover {
   border-color: var(--apple-accent);
 }
 
@@ -392,6 +405,11 @@
   background-color: var(--apple-border);
   transition: 0.2s;
   border-radius: 22px;
+}
+
+.theme-dark .apple-toggle-slider {
+  background-color: #48484a;
+  /* 深色模式下开关未激活时的背景色 */
 }
 
 .apple-toggle-slider:before {
