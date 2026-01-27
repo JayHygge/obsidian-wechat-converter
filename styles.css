@@ -409,8 +409,13 @@
 
 body.theme-dark .apple-toggle-slider,
 .theme-dark .apple-toggle-slider {
-  background-color: #48484a !important;
-  /* 深色模式下开关未激活时的背景色 */
+  background-color: #2e2e2e !important;
+  border: 1px solid #555 !important;
+}
+
+body.theme-dark .apple-toggle-input:checked+.apple-toggle-slider,
+.theme-dark .apple-toggle-input:checked+.apple-toggle-slider {
+  border-color: var(--apple-accent) !important;
 }
 
 .apple-toggle-slider:before {
