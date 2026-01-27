@@ -408,7 +408,7 @@
 }
 
 .theme-dark .apple-toggle-slider {
-  background-color: #48484a;
+  background-color: #48484a !important;
   /* 深色模式下开关未激活时的背景色 */
 }
 
@@ -426,7 +426,7 @@
 }
 
 .apple-toggle-input:checked+.apple-toggle-slider {
-  background-color: var(--apple-accent);
+  background-color: var(--apple-accent) !important;
 }
 
 .apple-toggle-input:checked+.apple-toggle-slider:before {
