@@ -62,8 +62,6 @@
   --apple-surface: var(--background-secondary);
   --apple-border: var(--background-modifier-border);
   --apple-divider: var(--background-modifier-border);
-  --apple-accent: var(--interactive-accent);
-  --apple-accent-hover: var(--interactive-accent-hover);
 
   --apple-code-text: #ff6b6b;
   --apple-code-bg: #2d2d2d;
@@ -415,6 +413,7 @@ body.theme-dark .apple-toggle-slider,
 
 body.theme-dark .apple-toggle-input:checked+.apple-toggle-slider,
 .theme-dark .apple-toggle-input:checked+.apple-toggle-slider {
+  background-color: var(--apple-accent) !important;
   border-color: var(--apple-accent) !important;
 }
 
