@@ -414,6 +414,12 @@ class AppleStyleView extends ItemView {
     steps.createEl('div', { text: '1️⃣ 打开需要转换的 Markdown 文件' });
     steps.createEl('div', { text: '2️⃣ 预览区会自动显示转换效果' });
     steps.createEl('div', { text: '3️⃣ 点击「复制到公众号」粘贴即可' });
+
+    // 添加提示
+    const note = placeholder.createEl('p', {
+      text: '注意：如当前已打开文档但未显示，请重新点击一下文档即可触发',
+      cls: 'apple-placeholder-note'
+    });
   }
 
   /**

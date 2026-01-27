@@ -504,6 +504,13 @@ body.theme-dark .apple-toggle-input:checked+.apple-toggle-slider,
 /* ========================================
    占位符
    ======================================== */
+.apple-placeholder-note {
+  font-size: 12px !important;
+  color: var(--apple-tertiary);
+  margin-top: 24px !important;
+  opacity: 0.8;
+}
+
 .apple-placeholder {
   display: flex;
   flex-direction: column;
