@@ -46,7 +46,10 @@ window.AppleStyleConverter = class AppleStyleConverter {
 
     this.md.renderer.rules.image = (tokens, idx) => {
       const src = tokens[idx].attrGet('src'), alt = tokens[idx].content;
-      const caption = alt || this.extractFileName(src);
+      // 优先使用 alt，如果没有则从 src 提取文件名。且都去除后缀。
+      let caption = alt || this.extractFileName(src);
+      caption = caption.replace(/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i, '');
+
       if (this.avatarUrl) {
         return `<figure style="${this.getInlineStyle('figure')}"><div style="${this.getInlineStyle('avatar-header')}"><img src="${this.avatarUrl}" alt="logo" style="${this.getInlineStyle('avatar')}"><span style="${this.getInlineStyle('avatar-caption')}">${caption}</span></div><img src="${src}" alt="${alt}" style="${this.getInlineStyle('img')}"></figure>`;
       }

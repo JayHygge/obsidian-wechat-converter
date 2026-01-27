@@ -308,7 +308,7 @@ window.AppleTheme = class AppleTheme {
       'figure': `
         display: block;
         margin: ${s.md}px 0;
-        text-align: center;
+        text-align: left; /* Changed from center to left to prevent inheritance issues */
         border: 1px solid #e1e4e8; /* Box Border */
         border-radius: ${r.md}px;
         padding: ${s.md}px;
@@ -392,9 +392,12 @@ window.AppleTheme = class AppleTheme {
       // === 头像相关 ===
       'avatar-header': `
         margin: 0 0 ${s.sm}px 0;
-        display: flex; /* Flex alignment */
-        align-items: center;
+        display: flex !important; 
+        align-items: center !important;
+        justify-content: flex-start !important;
+        text-align: left !important;
         width: 100%;
+        flex-direction: row !important;
       `,
 
       'avatar': `
