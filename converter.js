@@ -48,7 +48,10 @@ window.AppleStyleConverter = class AppleStyleConverter {
       const src = tokens[idx].attrGet('src'), alt = tokens[idx].content;
       // 优先使用 alt，如果没有则从 src 提取文件名。且都去除后缀。
       let caption = alt || this.extractFileName(src);
+      // 去除文件后缀
       caption = caption.replace(/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i, '');
+      // 去除 Obsidian 尺寸参数 (例如 |100, |200x100)
+      caption = caption.replace(/\|\s*\d+(x\d+)?\s*$/, '');
 
       if (this.avatarUrl) {
         return `<figure style="${this.getInlineStyle('figure')}"><div style="${this.getInlineStyle('avatar-header')}"><img src="${this.avatarUrl}" alt="logo" style="${this.getInlineStyle('avatar')}"><span style="${this.getInlineStyle('avatar-caption')}">${caption}</span></div><img src="${src}" alt="${alt}" style="${this.getInlineStyle('img')}"></figure>`;

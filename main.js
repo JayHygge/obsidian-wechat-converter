@@ -285,6 +285,8 @@ class AppleStyleView extends ItemView {
       checkbox.addEventListener('change', () => this.onCodeLineNumberChange(checkbox.checked));
     });
 
+
+
     // === 操作按钮 ===
     const actions = panel.createEl('div', { cls: 'apple-actions' });
 
@@ -366,6 +368,8 @@ class AppleStyleView extends ItemView {
     }
     await this.convertCurrent(true);
   }
+
+
 
   updateButtonActive(grid, value) {
     grid.querySelectorAll('button').forEach(btn => {
@@ -514,41 +518,7 @@ class AppleStyleSettingTab extends PluginSettingTab {
     containerEl.empty();
 
     containerEl.createEl('h2', { text: '🍎 Apple Style 转换器设置' });
-
-    new Setting(containerEl)
-      .setName('默认主题')
-      .setDesc('选择默认的排版主题')
-      .addDropdown(dropdown => {
-        const themes = { github: '简约', wechat: '经典', serif: '优雅', ink: '水墨', aurora: '极光', vintage: '复古', porcelain: '青瓷', editorial: '报章', deco: '摩登' };
-        Object.entries(themes).forEach(([k, v]) => dropdown.addOption(k, v));
-        dropdown.setValue(this.plugin.settings.theme);
-        dropdown.onChange(async (value) => {
-          this.plugin.settings.theme = value;
-          await this.plugin.saveSettings();
-        });
-      });
-
-    new Setting(containerEl)
-      .setName('默认字号')
-      .setDesc('1=小, 3=推荐, 5=大')
-      .addSlider(slider => slider
-        .setLimits(1, 5, 1)
-        .setValue(this.plugin.settings.fontSize)
-        .setDynamicTooltip()
-        .onChange(async (value) => {
-          this.plugin.settings.fontSize = value;
-          await this.plugin.saveSettings();
-        }));
-
-    new Setting(containerEl)
-      .setName('Mac 风格代码块')
-      .setDesc('在代码块显示红绿灯样式')
-      .addToggle(toggle => toggle
-        .setValue(this.plugin.settings.macCodeBlock)
-        .onChange(async (value) => {
-          this.plugin.settings.macCodeBlock = value;
-          await this.plugin.saveSettings();
-        }));
+    containerEl.createEl('p', { text: '更多排版样式选项（主题、字号、代码块等）请在插件侧边栏面板中进行设置。' });
 
     containerEl.createEl('h3', { text: '🖼️ 图片水印设置' });
 
