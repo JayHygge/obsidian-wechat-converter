@@ -44,6 +44,7 @@ window.AppleTheme = class AppleTheme {
    * 🎨 主题配置 - 每种主题的独特配色和规则
    */
   static THEME_CONFIGS = {
+    // 基于咪蒙排版标准：行间距 1.8, 字间距 0, 段落间距保留各主题特色
     github: {
       name: '简约',
       headingWeight: 800,
@@ -61,22 +62,22 @@ window.AppleTheme = class AppleTheme {
     wechat: {
       name: '经典',
       headingWeight: 700,
-      headingLetterSpacing: 0.5,
-      lineHeight: 1.9,
+      headingLetterSpacing: 0,
+      lineHeight: 1.8,
       paragraphGap: 24,
       h1Decoration: 'left-border', // 左边框
       h2Decoration: 'left-border',
       h3Decoration: 'left-border',
       blockquoteBorderWidth: 4,
-      textColor: '#3f3f3f',
+      textColor: '#3e3e3e',
       headingColor: '#3e3e3e',
       linkDecoration: 'none',
     },
     serif: {
       name: '优雅',
       headingWeight: 700,
-      headingLetterSpacing: 1.0,
-      lineHeight: 1.9,
+      headingLetterSpacing: 0,
+      lineHeight: 1.8,
       paragraphGap: 20,
       h1Decoration: 'center-underline', // 居中下划线
       h2Decoration: 'center-underline',
@@ -231,7 +232,7 @@ window.AppleTheme = class AppleTheme {
         color: ${config.textColor};
         margin: 0 0 ${config.paragraphGap}px 0;
         text-align: justify;
-        letter-spacing: 0.02em;
+        letter-spacing: 0;
       `,
 
       // === 引用块 ===
