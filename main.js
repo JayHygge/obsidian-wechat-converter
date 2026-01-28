@@ -634,9 +634,9 @@ class AppleStyleView extends ItemView {
       const response = await fetch(img.src);
       const blob = await response.blob();
 
-      // 检查大小警告 (仅控制台记录，不弹窗以避免黑点)
+      // 检查大小警告
       if (blob.size > 10 * 1024 * 1024) {
-        console.warn('发现超大图片 (>10MB)');
+        new Notice(`⚠️ 发现大图 (${(blob.size / 1024 / 1024).toFixed(1)}MB)，处理可能较慢`, 5000);
       }
 
       let dataUrl;
