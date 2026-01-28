@@ -44,6 +44,7 @@ window.AppleTheme = class AppleTheme {
    * 🎨 主题配置 - 每种主题的独特配色和规则
    */
   static THEME_CONFIGS = {
+
     github: {
       name: '简约',
       lineHeight: 1.8,
@@ -56,10 +57,11 @@ window.AppleTheme = class AppleTheme {
       headingLetterSpacing: -0.5,
       textColor: '#3e3e3e',
       headingColor: '#3e3e3e',
+
       linkDecoration: 'underline',
       blockquoteBorderWidth: 4,
-      blockquoteBorderColor: '#d0d7de', // Github 灰
-      blockquoteBg: '#ffffff', // 白底
+      // Removed blockquoteBorderColor to allow theme color (was #d0d7de)
+      // Removed blockquoteBg to allow theme color tint (was #ffffff)
     },
     wechat: {
       name: '经典',
@@ -189,11 +191,20 @@ window.AppleTheme = class AppleTheme {
       case 'p':
         return `font-family: ${font}; font-size: ${sizes.base}px; line-height: ${config.lineHeight}; color: ${config.textColor}; margin: 0 0 ${config.paragraphGap}px 0; text-align: justify; letter-spacing: 0;`;
 
+
+
+
       case 'blockquote':
         if (config.blockquoteStyle === 'center') {
-          return `font-family: ${AppleTheme.FONTS.serif}; font-size: ${sizes.base}px; line-height: 1.8; color: #555; background: #fafafa; margin: 30px 40px; padding: 20px; text-align: center; border: none; font-style: italic; position: relative;`;
+          // Centered Blockquote: Now using theme color tint (1F) instead of purely grey, for continuity
+          return `font-family: ${AppleTheme.FONTS.serif}; font-size: ${sizes.base}px; line-height: 1.8; color: #555; background: ${config.blockquoteBg || color + '1F'}; margin: 30px 40px; padding: 20px; text-align: center; border: none; font-style: italic; position: relative; border-radius: 4px;`;
         }
-        return `font-size: ${sizes.base}px; line-height: ${config.lineHeight}; color: #666; background: ${config.blockquoteBg || color + '08'}; margin: ${s.md}px 0 ${s.md}px 1em; padding: ${s.sm}px ${s.md}px; border-left: ${config.blockquoteBorderWidth}px solid ${config.blockquoteBorderColor || color}; font-style: italic; border-radius: 0 ${r.sm}px ${r.sm}px 0;`;
+
+        // Standard Blockquote: Restoring Italic and adjusting padding/background to match the screenshot
+        // Background: Light opacity of theme color (1F) for better visibility
+        // Border: Solid theme color
+        // Font: Italicize to distinguish from body text
+        return `font-size: ${sizes.base}px; line-height: ${config.lineHeight}; color: #595959; background: ${config.blockquoteBg || color + '1F'}; margin: ${s.md}px 0; padding: ${s.md}px; border-left: ${config.blockquoteBorderWidth}px solid ${config.blockquoteBorderColor || color}; font-style: italic; border-radius: 3px;`;
 
       case 'pre':
         return `background: #f6f8fa; border: 1px solid #e1e4e8; border-radius: ${r.md}px; padding: ${s.md}px; margin: ${s.md}px 0; overflow-x: auto; font-family: ${AppleTheme.FONTS.monospace}; font-size: ${sizes.code}px; line-height: 1.6; color: #24292e;`;

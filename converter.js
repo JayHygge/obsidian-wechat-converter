@@ -4,11 +4,14 @@
  * 针对微信公众号优化：使用 section 结构，增强兼容性
  */
 
+
 window.AppleStyleConverter = class AppleStyleConverter {
-  constructor(theme, avatarUrl = '', showImageCaption = true) {
+  constructor(theme, avatarUrl = '', showImageCaption = true, app = null, sourcePath = '') {
     this.theme = theme;
     this.avatarUrl = avatarUrl;
     this.showImageCaption = showImageCaption;
+    this.app = app; // Obsidian App instance
+    this.sourcePath = sourcePath; // Current file path for relative resolution
     this.md = null;
     this.hljs = null;
   }
@@ -22,6 +25,30 @@ window.AppleStyleConverter = class AppleStyleConverter {
   }
 
   reinit() { this.md = null; }
+
+  updateSourcePath(path) {
+    this.sourcePath = path;
+  }
+
+  resolveImagePath(src) {
+    if (!this.app) return src;
+    // IF remote url, bypass
+    if (/^(https?:\/\/|data:)/i.test(src)) return src;
+
+    try {
+      // Markdown-it might encode the URL (e.g. %20 for space), but Obsidian expects decoded paths
+      const linkPath = decodeURI(src);
+      const sourcePath = this.sourcePath;
+      // Resolve using Obsidian's standard API
+      const tFile = this.app.metadataCache.getFirstLinkpathDest(linkPath, sourcePath);
+      if (tFile) {
+        return this.app.vault.getResourcePath(tFile);
+      }
+    } catch (e) {
+      console.error('Image resolution failed:', src, e);
+    }
+    return src;
+  }
 
   setupRenderRules() {
     this.md.renderer.rules.paragraph_open = () => `<p style="${this.getInlineStyle('p')}">`;
@@ -46,20 +73,38 @@ window.AppleStyleConverter = class AppleStyleConverter {
     this.md.renderer.rules.s_open = () => `<del style="${this.getInlineStyle('del')}">`;
 
     this.md.renderer.rules.image = (tokens, idx) => {
-      const src = tokens[idx].attrGet('src'), alt = tokens[idx].content;
-      // 优先使用 alt，如果没有则从 src 提取文件名
-      let caption = alt || this.extractFileName(src);
+      let src = tokens[idx].attrGet('src');
+      const alt = tokens[idx].content;
 
-      // 1. 先去除 Obsidian 尺寸参数 (例如 |100, |200x100), 这样后缀若在中间也能被正确处理
-      caption = caption.replace(/\|\s*\d+(x\d+)?\s*$/, '');
-      // 2. 再去除文件后缀 (现在它应该在字符串末尾了)
-      caption = caption.replace(/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i, '');
+      // Resolve Local Path for Preview
+      src = this.resolveImagePath(src);
+
+
+      let caption = '';
+
+      if (!alt) {
+        // Logic 1: ![]() -> Extract filename, clean query/ext
+        caption = decodeURIComponent(this.extractFileName(src));
+        caption = caption.replace(/\?.*$/, '');
+        caption = caption.replace(/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i, '');
+      } else {
+        // Logic 2: ![alt]() -> Use alt, clean resize/ext
+        caption = alt;
+        caption = caption.replace(/\|\s*\d+(x\d+)?\s*$/, '');
+        caption = caption.replace(/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i, '');
+      }
+
 
       if (this.avatarUrl) {
         // 水印模式：显示头像 + 图片名称，使用带边框的样式
         const avatarHeaderStyle = this.getInlineStyle('avatar-header');
         const spacerStyle = 'display:block;height:8px;line-height:8px;font-size:0;';
-        return `<figure style="${this.getInlineStyle('figure')}"><div style="${avatarHeaderStyle}"><img src="${this.avatarUrl}" alt="logo" style="${this.getInlineStyle('avatar')}"><span style="${this.getInlineStyle('avatar-caption')}">${caption}</span></div><section style="${spacerStyle}">&nbsp;</section><img src="${src}" alt="${alt}" style="${this.getInlineStyle('img')}"></figure>`;
+        // Fix: Force text-align: left for the figure container in watermark mode to prevent centering
+        // We strip the default text-align: center from the figure style and add text-align: left
+        let figureStyle = this.getInlineStyle('figure');
+        figureStyle = figureStyle.replace('text-align: center;', 'text-align: left;');
+
+        return `<figure style="${figureStyle}"><div style="${avatarHeaderStyle}"><img src="${this.avatarUrl}" alt="logo" style="${this.getInlineStyle('avatar')}"><span style="${this.getInlineStyle('avatar-caption')}">${caption}</span></div><section style="${spacerStyle}">&nbsp;</section><img src="${src}" alt="${alt}" style="${this.getInlineStyle('img')}"></figure>`;
       }
 
       // 非水印模式：无边框样式
@@ -232,8 +277,19 @@ ${macHeader}
   getInlineStyle(tagName) { return this.theme.getStyle(tagName); }
   stripFrontmatter(md) { return md.replace(/^---\n[\s\S]*?\n---\n?/, ''); }
 
+
   async convert(markdown) {
-    await this.initMarkdownIt();
+    if (!this.md) await this.initMarkdownIt();
+
+
+    // Pre-process: Convert Wiki-links ![[...]] to standard images ![](...)
+    // This allows markdown-it to tokenize them as images, which our renderer then catches.
+    // Regex: ![[path|alt]] or ![[path]]
+    // Replacement: ![alt](path) - we preserve alt so the renderer can decide how to use it
+    markdown = markdown.replace(/!\[\[(.*?)(?:\|(.*?))?\]\]/g, (match, path, alt) => {
+      return `![${alt || ''}](${path})`;
+    });
+
     let html = this.md.render(this.stripFrontmatter(markdown));
     html = this.fixListParagraphs(html);
     return `<section style="${this.getInlineStyle('section')}">${html}</section>`;
