@@ -616,16 +616,10 @@ class AppleStyleView extends ItemView {
     }
 
 
+
     // Dismiss the processing notice so it doesn't stack with the success notice
-    // Fix: Use generic clean up to avoid "black bar" glitch when removing
     if (processingNotice && processingNotice.noticeEl) {
-      // Best practice: hide first, then remove to avoid layout shifts or black bars
-      processingNotice.noticeEl.style.display = 'none';
-      // We can just leave it hidden, or remove it. 
-      // Since the user reported black dots with remove(), we'll be extra careful:
-      // Just hiding it is often enough if the DOM node isn't massive.
-      // However, let's remove it after a tick to ensure it's gone from flow.
-      setTimeout(() => processingNotice.noticeEl.remove(), 0);
+      processingNotice.noticeEl.remove();
     }
 
     return true;
