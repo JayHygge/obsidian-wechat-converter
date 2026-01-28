@@ -801,22 +801,8 @@ class AppleStylePlugin extends Plugin {
       },
     });
 
-    this.addCommand({
-      id: 'convert-to-apple-style',
-      name: '转换为公众号格式',
-      callback: async () => {
-        const view = this.getConverterView();
-        if (view) {
-          await view.convertCurrent();
-        } else {
-          await this.openConverter();
-          setTimeout(async () => {
-            const view = this.getConverterView();
-            if (view) await view.convertCurrent();
-          }, 500);
-        }
-      },
-    });
+
+    // Command 'convert-to-apple-style' removed as per user request
 
     this.addSettingTab(new AppleStyleSettingTab(this.app, this));
 
