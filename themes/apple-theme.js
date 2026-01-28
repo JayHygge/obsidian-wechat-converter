@@ -223,15 +223,17 @@ window.AppleTheme = class AppleTheme {
 
 
 
+
       case 'figure':
         // Fix: Restoring wireframe (border/padding) & balanced spacing (20px top/bottom)
-        return `display: block; margin: 20px 0; text-align: center; border: 1px solid #e1e4e8; border-radius: ${r.md}px; padding: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);`;
+        // No shadow for cleaner look
+        return `display: block; margin: 20px 0; text-align: center; border: 1px solid #e1e4e8; border-radius: ${r.md}px; padding: 10px;`;
 
       case 'figcaption':
         return `font-size: ${sizes.caption}px; color: #999; text-align: center; margin-top: ${s.sm}px;`;
 
       case 'img':
-        return `display: block; margin: 0 auto; max-width: 100%; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);`;
+        return `display: block; margin: 0 auto; max-width: 100%; border-radius: 4px;`;
 
       case 'a':
         return `color: ${color}; text-decoration: ${config.linkDecoration}; border-bottom: ${config.linkDecoration === 'none' ? `1px dashed ${color}` : 'none'};`;
