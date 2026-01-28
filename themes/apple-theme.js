@@ -194,17 +194,18 @@ window.AppleTheme = class AppleTheme {
 
 
 
+
       case 'blockquote':
         if (config.blockquoteStyle === 'center') {
           // Centered Blockquote: Now using theme color tint (1F) instead of purely grey, for continuity
-          return `font-family: ${AppleTheme.FONTS.serif}; font-size: ${sizes.base}px; line-height: 1.8; color: #555; background: ${config.blockquoteBg || color + '1F'}; margin: 30px 40px; padding: 20px; text-align: center; border: none; font-style: italic; position: relative; border-radius: 4px;`;
+          return `font-family: ${AppleTheme.FONTS.serif}; font-size: ${sizes.base}px; line-height: 1.8; color: #555; background: ${config.blockquoteBg || color + '1F'}; margin: 30px 40px; padding: 20px; text-align: center; border: none; position: relative; border-radius: 4px;`;
         }
 
         // Standard Blockquote: Restoring Italic and adjusting padding/background to match the screenshot
         // Background: Light opacity of theme color (1F) for better visibility
         // Border: Solid theme color
-        // Font: Italicize to distinguish from body text
-        return `font-size: ${sizes.base}px; line-height: ${config.lineHeight}; color: #595959; background: ${config.blockquoteBg || color + '1F'}; margin: ${s.md}px 0; padding: ${s.md}px; border-left: ${config.blockquoteBorderWidth}px solid ${config.blockquoteBorderColor || color}; font-style: italic; border-radius: 3px;`;
+        // Font: Normal (removed italic) for better legibility on mobile
+        return `font-size: ${sizes.base}px; line-height: ${config.lineHeight}; color: #595959; background: ${config.blockquoteBg || color + '1F'}; margin: ${s.md}px 0; padding: ${s.md}px; border-left: ${config.blockquoteBorderWidth}px solid ${config.blockquoteBorderColor || color}; border-radius: 3px;`;
 
       case 'pre':
         return `background: #f6f8fa; border: 1px solid #e1e4e8; border-radius: ${r.md}px; padding: ${s.md}px; margin: ${s.md}px 0; overflow-x: auto; font-family: ${AppleTheme.FONTS.monospace}; font-size: ${sizes.code}px; line-height: 1.6; color: #24292e;`;
