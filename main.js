@@ -553,8 +553,17 @@ class AppleStyleView extends ItemView {
         await navigator.clipboard.write([clipboardItem]);
 
         // 如果处理了图片，提示 "已复制 (含图片)"，否则只提示 "已复制"
+        // Refactor: Reuse the existing processing notice if available for seamless transition
         if (processed) {
-          new Notice('✅ 已复制！(本地图片已压缩嵌入)');
+          processed.setMessage('✅ 已复制！(本地图片已压缩嵌入)');
+          // Manually fade out after 4 seconds (since we used duration 0)
+          setTimeout(() => {
+            if (processed.noticeEl) {
+              processed.noticeEl.style.transition = 'opacity 0.5s';
+              processed.noticeEl.style.opacity = '0';
+              setTimeout(() => processed.noticeEl.remove(), 500);
+            }
+          }, 4000);
         } else {
           new Notice('✅ 已复制！可直接粘贴到公众号编辑器');
         }
@@ -578,7 +587,8 @@ class AppleStyleView extends ItemView {
     const localImages = images.filter(img => img.src.startsWith('app://'));
 
 
-    if (localImages.length === 0) return false;
+
+    if (localImages.length === 0) return null;
 
     // UX Optimization: Show notice but ensure it stays for at least 800ms to avoid "flashing"
 
@@ -604,13 +614,9 @@ class AppleStyleView extends ItemView {
 
 
     // Dismiss the processing notice so it doesn't stack with the success notice
-    // Fix: Use display: none instead of remove() to avoid "black bar" glitch
-    if (processingNotice && processingNotice.noticeEl) {
-      processingNotice.noticeEl.style.display = 'none';
-      // Optional: create a new empty notice to ensure cleaner transition? No, keeping it simple.
-    }
+    // Refactor: Don't hide it here. Return the notice instance so copyHTML can reuse it for seamless transition.
 
-    return true;
+    return processingNotice;
   }
 
 
