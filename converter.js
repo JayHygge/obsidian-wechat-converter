@@ -282,12 +282,14 @@ ${macHeader}
     if (!this.md) await this.initMarkdownIt();
 
 
+
     // Pre-process: Convert Wiki-links ![[...]] to standard images ![](...)
-    // This allows markdown-it to tokenize them as images, which our renderer then catches.
     // Regex: ![[path|alt]] or ![[path]]
-    // Replacement: ![alt](path) - we preserve alt so the renderer can decide how to use it
-    markdown = markdown.replace(/!\[\[(.*?)(?:\|(.*?))?\]\]/g, (match, path, alt) => {
-      return `![${alt || ''}](${path})`;
+    // Fix: Use more robust regex preventing greedy capture and encoding URI for paths with spaces
+    markdown = markdown.replace(/!\[\[([^\[\]|]+)(?:\|([^\[\]]+))?\]\]/g, (match, path, alt) => {
+      // Must encodeURI to handle spaces in filenames which are valid in WikiLinks but break standard Markdown images
+      // trimmed path to avoid leading/trailing spaces breaking the link
+      return `![${alt || ''}](${encodeURI(path.trim())})`;
     });
 
 
