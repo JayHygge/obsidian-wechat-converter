@@ -332,6 +332,7 @@ class AppleStyleView extends ItemView {
       cls: 'apple-btn-primary apple-btn-full', // Full width
       text: '📋 复制到公众号',
     });
+    this.copyBtn = copyBtn; // Store reference for feedback
     copyBtn.addEventListener('click', () => this.copyHTML());
   }
 
@@ -528,17 +529,24 @@ class AppleStyleView extends ItemView {
    * 复制 HTML
    */
   async copyHTML() {
-    if (this.isCopying) {
-      new Notice('⚠️ 正在处理中，请勿重复点击');
-      return;
-    }
+    if (this.isCopying) return;
 
     if (!this.currentHtml) {
-      new Notice('请先转换文档');
+      if (this.copyBtn) {
+        const originalText = this.copyBtn.innerHTML;
+        this.copyBtn.setText('⚠️ 请先转换文档');
+        setTimeout(() => { if (this.copyBtn) this.copyBtn.innerHTML = originalText; }, 2000);
+      }
       return;
     }
 
+    const originalText = this.copyBtn.innerHTML;
+
     this.isCopying = true;
+    if (this.copyBtn) {
+      this.copyBtn.disabled = true;
+      this.copyBtn.setText('⏳ 正在压缩图片...');
+    }
 
     try {
       // 创建临时的 DOM 容器来解析和处理图片
@@ -559,13 +567,15 @@ class AppleStyleView extends ItemView {
         });
         await navigator.clipboard.write([clipboardItem]);
 
-        // 如果处理了图片，提示 "已复制 (含图片)"，否则只提示 "已复制"
-        // 如果处理了图片，提示 "已复制 (含图片)"，否则只提示 "已复制"
-        // Refactor: Back to simpler "Two Notices" logic as requested, ensuring robustness
-        if (processed) {
-          new Notice('✅ 已复制！(本地图片已压缩嵌入)');
-        } else {
-          new Notice('✅ 已复制！可直接粘贴到公众号编辑器');
+        if (this.copyBtn) {
+          this.copyBtn.setText('✅ 已复制！');
+          // Revert button after 2 seconds
+          setTimeout(() => {
+            if (this.copyBtn) {
+              this.copyBtn.disabled = false;
+              this.copyBtn.innerHTML = originalText;
+            }
+          }, 2000);
         }
         return;
       }
@@ -575,7 +585,13 @@ class AppleStyleView extends ItemView {
 
     } catch (error) {
       console.error('复制失败:', error);
-      new Notice('❌ 复制失败: ' + error.message);
+      if (this.copyBtn) {
+        this.copyBtn.setText('❌ 复制失败');
+        setTimeout(() => {
+          this.copyBtn.disabled = false;
+          this.copyBtn.innerHTML = originalText;
+        }, 2000);
+      }
     } finally {
       this.isCopying = false;
     }
@@ -588,21 +604,10 @@ class AppleStyleView extends ItemView {
     const images = Array.from(container.querySelectorAll('img'));
     const localImages = images.filter(img => img.src.startsWith('app://'));
 
-
-
-
     if (localImages.length === 0) return false;
 
-    // UX Optimization: Show notice but ensure it stays for at least 800ms to avoid "flashing"
-
-    // UX Optimization: Show notice but ensure it stays for at least 800ms to avoid "flashing"
-
-    // UX Optimization: Show notice but ensure it stays for at least 800ms to avoid "flashing"
-
-
-    // UX Optimization: Show notice but ensure it stays for at least 800ms to avoid "flashing"
+    // Start time for minimum duration check (prevents UX flicker)
     const startTime = Date.now();
-    const processingNotice = new Notice(`⏳ 正在压缩 ${localImages.length} 张图片...`, 0); // 0 = keep until manual dismissal
 
     // 并发控制：3个一组
     const concurrency = 3;
@@ -618,14 +623,6 @@ class AppleStyleView extends ItemView {
       await new Promise(resolve => setTimeout(resolve, minDuration - elapsed));
     }
 
-
-
-
-    // Dismiss the processing notice so it doesn't stack with the success notice
-    if (processingNotice && processingNotice.noticeEl) {
-      processingNotice.noticeEl.remove();
-    }
-
     return true;
   }
 
@@ -637,9 +634,9 @@ class AppleStyleView extends ItemView {
       const response = await fetch(img.src);
       const blob = await response.blob();
 
-      // 检查大小警告
+      // 检查大小警告 (仅控制台记录，不弹窗以避免黑点)
       if (blob.size > 10 * 1024 * 1024) {
-        new Notice('⚠️ 发现超大图片 (>10MB)，处理可能较慢');
+        console.warn('发现超大图片 (>10MB)');
       }
 
       let dataUrl;
