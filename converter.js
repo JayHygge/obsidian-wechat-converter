@@ -290,14 +290,27 @@ ${macHeader}
       return `![${alt || ''}](${path})`;
     });
 
+
     let html = this.md.render(this.stripFrontmatter(markdown));
     html = this.fixListParagraphs(html);
+    html = this.unwrapFigures(html); // Fix: Remove <p> wrappers from <figure> to prevent empty lines
     return `<section style="${this.getInlineStyle('section')}">${html}</section>`;
   }
 
   fixListParagraphs(html) {
     const style = this.getInlineStyle('li p');
     return html.replace(/<li[^>]*>[\s\S]*?<\/li>/g, m => m.replace(/<p style="[^"]*">/g, `<p style="${style}">`));
+  }
+
+  /**
+   * Fix: Unwrap <figure> from <p> tags
+   * Markdown-it wraps images in <p> by default, but <figure> inside <p> is invalid.
+   * Browsers (and WeChat) handle this by splitting the <p> into two empty <p>s above and below,
+   * causing unwanted empty lines. This regex removes the wrapping <p>.
+   */
+  unwrapFigures(html) {
+    // Logic: Match <p ...> <figure>...</figure> </p> and replace with <figure>...</figure>
+    return html.replace(/<p[^>]*>\s*(<figure[\s\S]*?<\/figure>)\s*<\/p>/gi, '$1');
   }
 
   escapeHtml(text) {
