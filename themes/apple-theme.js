@@ -80,16 +80,17 @@ window.AppleTheme = class AppleTheme {
       name: '优雅',
       lineHeight: 1.8,
       paragraphGap: 20,
-      h1Decoration: 'border-box',        // 边框盒子
-      h2Decoration: 'bottom-line-center',// 居中极细线
-      h3Decoration: 'bottom-line-left',  // 左对齐短线
-      h4Decoration: 'italic-serif',      // 斜体衬线
+      h1Decoration: 'editorial-h1',      // 杂志大标题 (金线)
+      h2Decoration: 'editorial-h1',      // H2 此时也是金线 (Level 2 = Level 1)
+      h3Decoration: 'editorial-h2',      // H3 使用原 H2 样式 (斜体，现在的 helper 已强制左对齐)
+      h4Decoration: 'editorial-h3',      // H4 使用原 H3 (左对齐下划线)
       headingWeight: 700,
-      headingLetterSpacing: 0,
+      headingLetterSpacing: 1,           // 优雅主题增加字间距
       textColor: '#3e3e3e',
       headingColor: '#3e3e3e',
       linkDecoration: 'none',
-      blockquoteBorderWidth: 3,
+      blockquoteBorderWidth: 0,          // 居中样式不需要左边框
+      blockquoteStyle: 'center',         // 新增：居中引用
     },
   };
 
@@ -189,6 +190,9 @@ window.AppleTheme = class AppleTheme {
         return `font-family: ${font}; font-size: ${sizes.base}px; line-height: ${config.lineHeight}; color: ${config.textColor}; margin: 0 0 ${config.paragraphGap}px 0; text-align: justify; letter-spacing: 0;`;
 
       case 'blockquote':
+        if (config.blockquoteStyle === 'center') {
+          return `font-family: ${AppleTheme.FONTS.serif}; font-size: ${sizes.base}px; line-height: 1.8; color: #555; background: #fafafa; margin: 30px 40px; padding: 20px; text-align: center; border: none; font-style: italic; position: relative;`;
+        }
         return `font-size: ${sizes.base}px; line-height: ${config.lineHeight}; color: #666; background: ${config.blockquoteBg || color + '08'}; margin: ${s.md}px 0 ${s.md}px 1em; padding: ${s.sm}px ${s.md}px; border-left: ${config.blockquoteBorderWidth}px solid ${config.blockquoteBorderColor || color}; font-style: italic; border-radius: 0 ${r.sm}px ${r.sm}px 0;`;
 
       case 'pre':
@@ -236,11 +240,11 @@ window.AppleTheme = class AppleTheme {
         return `text-decoration: line-through; color: #999;`;
 
       case 'avatar-header':
-        return `margin: 0 0 ${s.sm}px 0 !important; display: flex !important; align-items: center !important; justify-content: center !important; width: 100%; flex-direction: row !important;`;
+        return `margin: 0 0 ${s.sm}px 0 !important; display: flex !important; align-items: center !important; justify-content: flex-start !important; width: 100%; flex-direction: row !important; text-align: left !important;`;
       case 'avatar':
         return `width: 32px !important; height: 32px !important; border-radius: 50%; object-fit: cover; border: 1px solid #e8e8ed; flex-shrink: 0;`;
       case 'avatar-caption':
-        return `font-size: ${sizes.caption}px; color: #666; margin-left: 10px; line-height: 1.4;`;
+        return `font-size: ${sizes.caption}px; color: #666; margin-left: 10px; line-height: 1.4; text-align: left !important;`;
 
       default:
         return '';
@@ -252,6 +256,13 @@ window.AppleTheme = class AppleTheme {
   getH1Style(type, color, fontSize, font) {
     const base = `font-family: ${font}; display: block; font-size: ${fontSize}px; font-weight: bold; margin: 30px auto 20px; color: #333; text-align: center; line-height: 1.2;`;
     switch (type) {
+      case 'editorial-h1': // Magazine Style: Forced Serif + Golden Line
+        return `font-family: ${AppleTheme.FONTS.serif}; display: block; font-size: ${fontSize}px; font-weight: bold; margin: 30px auto 20px; color: #333; text-align: center; line-height: 1.2;
+          background-image: linear-gradient(to right, transparent, ${color}, transparent);
+          background-size: 100px 1px;
+          background-repeat: no-repeat;
+          background-position: bottom center;
+          padding-bottom: 20px; letter-spacing: 1px;`;
       case 'bottom-line':
         // Pure CSS centered short line using linear-gradient (simulating image)
         return `${base} 
@@ -270,6 +281,15 @@ window.AppleTheme = class AppleTheme {
   getH2Style(type, color, fontSize, font) {
     const base = `font-family: ${font}; display: block; font-size: ${fontSize}px; font-weight: bold; margin: 40px auto 20px; text-align: center; color: #333; line-height: 1.25;`;
     switch (type) {
+      case 'editorial-h1': // Golden Line (Shifted from H1)
+        return `font-family: ${AppleTheme.FONTS.serif}; display: block; font-size: ${fontSize}px; font-weight: bold; margin: 40px auto 20px; color: #333; text-align: center; line-height: 1.2;
+          background-image: linear-gradient(to right, transparent, ${color}, transparent);
+          background-size: 100px 1px;
+          background-repeat: no-repeat;
+          background-position: bottom center;
+          padding-bottom: 20px; letter-spacing: 1px;`;
+      case 'editorial-h2': // Magazine Subtitle
+        return `font-family: ${AppleTheme.FONTS.serif}; display: block; font-size: ${fontSize}px; font-weight: normal; margin: 40px auto 20px; text-align: center; color: #333; line-height: 1.4; font-style: italic; letter-spacing: 1px;`;
       case 'bottom-line':
         // Pure CSS centered short line (thinner/shorter for H2)
         return `${base}
@@ -290,6 +310,11 @@ window.AppleTheme = class AppleTheme {
   getH3Style(type, color, fontSize, font) {
     const base = `font-family: ${font}; display: block; font-size: ${fontSize}px; font-weight: bold; margin: 24px 0 16px; text-align: left; color: #333; line-height: 1.3;`;
     switch (type) {
+      case 'editorial-h2': // Italic Serif (Left Aligned for H3)
+        return `font-family: ${AppleTheme.FONTS.serif}; display: block; font-size: ${fontSize}px; font-weight: normal; margin: 30px 0 16px; text-align: left; color: #333; line-height: 1.4; font-style: italic; letter-spacing: 1px;`;
+      case 'editorial-h3': // Magazine Section: Forced Serif + Left Underline
+        return `font-family: ${AppleTheme.FONTS.serif}; display: block; font-size: ${fontSize}px; font-weight: bold; margin: 30px 0 16px; text-align: left; color: #333; line-height: 1.3;
+           border-bottom: 1px solid ${color}; padding-bottom: 4px; display: inline-block; width: auto; letter-spacing: 0.5px;`;
       case 'left-border':
         return `${base} border-left: 4px solid ${color}; padding-left: 10px;`;
       case 'bottom-line-left':
@@ -302,6 +327,11 @@ window.AppleTheme = class AppleTheme {
   getH4Style(type, color, fontSize, font) {
     const base = `font-family: ${font}; display: block; font-size: ${fontSize}px; font-weight: bold; margin: 15px 0 10px; text-align: left; color: #333; line-height: 1.35;`;
     switch (type) {
+      case 'editorial-h3': // Inherit H3 style for H4
+        return `font-family: ${AppleTheme.FONTS.serif}; display: block; font-size: ${fontSize}px; font-weight: bold; margin: 15px 0 10px; text-align: left; color: #333; line-height: 1.35;
+           border-bottom: 1px solid ${color}; padding-bottom: 3px; display: inline-block; width: auto; letter-spacing: 0.5px;`;
+      case 'simple': // Simple Bold (User Font)
+        return `${base} color: ${color};`;
       case 'light-bg':
         return `${base} background-color: ${color}15; padding: 4px 8px; border-radius: 4px; display: inline-block; color: ${color};`;
       case 'italic-serif':
