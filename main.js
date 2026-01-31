@@ -108,44 +108,75 @@ var WechatAPI = class {
   }
   async uploadMultipart(url, blob, fieldName) {
     const { requestUrl } = require("obsidian");
-    const boundary = "----ObsidianWechatConverterBoundary" + Math.random().toString(36).substring(2);
-    const arrayBuffer = await blob.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
-    let header = `--${boundary}\r
-`;
-    header += `Content-Disposition: form-data; name="${fieldName}"; filename="image.jpg"\r
-`;
-    header += `Content-Type: image/jpeg\r
-\r
-`;
-    const footer = `\r
---${boundary}--\r
-`;
-    const headerBytes = new TextEncoder().encode(header);
-    const footerBytes = new TextEncoder().encode(footer);
-    const bodyBytes = new Uint8Array(headerBytes.length + bytes.length + footerBytes.length);
-    bodyBytes.set(headerBytes, 0);
-    bodyBytes.set(bytes, headerBytes.length);
-    bodyBytes.set(footerBytes, headerBytes.length + bytes.length);
-    try {
-      const response = await requestUrl({
-        url,
+    const mimeType = blob.type || "image/jpeg";
+    const ext = mimeType.includes("gif") ? "gif" : mimeType.includes("png") ? "png" : "jpg";
+    if (this.proxyUrl) {
+      const arrayBuffer = await blob.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64Data = btoa(binary);
+      const proxyResponse = await requestUrl({
+        url: this.proxyUrl,
         method: "POST",
-        body: bodyBytes.buffer,
-        // requestUrl 接受 ArrayBuffer
-        headers: {
-          "Content-Type": `multipart/form-data; boundary=${boundary}`
-        }
+        body: JSON.stringify({
+          url,
+          method: "UPLOAD",
+          // 特殊标记，告诉代理这是文件上传
+          fileData: base64Data,
+          fileName: `image.${ext}`,
+          mimeType,
+          fieldName
+        }),
+        contentType: "application/json"
       });
-      const data = response.json;
+      const data = proxyResponse.json;
       if (data.media_id || data.url) {
         return data;
       } else {
         throw new Error(`\u5FAE\u4FE1API\u62A5\u9519: ${data.errmsg} (${data.errcode})`);
       }
-    } catch (error) {
-      console.error("Upload Error:", error);
-      throw new Error(`\u7F51\u7EDC\u8BF7\u6C42\u5931\u8D25: ${error.message}`);
+    } else {
+      const boundary = "----ObsidianWechatConverterBoundary" + Math.random().toString(36).substring(2);
+      const arrayBuffer = await blob.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      let header = `--${boundary}\r
+`;
+      header += `Content-Disposition: form-data; name="${fieldName}"; filename="image.${ext}"\r
+`;
+      header += `Content-Type: ${mimeType}\r
+\r
+`;
+      const footer = `\r
+--${boundary}--\r
+`;
+      const headerBytes = new TextEncoder().encode(header);
+      const footerBytes = new TextEncoder().encode(footer);
+      const bodyBytes = new Uint8Array(headerBytes.length + bytes.length + footerBytes.length);
+      bodyBytes.set(headerBytes, 0);
+      bodyBytes.set(bytes, headerBytes.length);
+      bodyBytes.set(footerBytes, headerBytes.length + bytes.length);
+      try {
+        const response = await requestUrl({
+          url,
+          method: "POST",
+          body: bodyBytes.buffer,
+          headers: {
+            "Content-Type": `multipart/form-data; boundary=${boundary}`
+          }
+        });
+        const data = response.json;
+        if (data.media_id || data.url) {
+          return data;
+        } else {
+          throw new Error(`\u5FAE\u4FE1API\u62A5\u9519: ${data.errmsg} (${data.errcode})`);
+        }
+      } catch (error) {
+        console.error("Upload Error:", error);
+        throw new Error(`\u7F51\u7EDC\u8BF7\u6C42\u5931\u8D25: ${error.message}`);
+      }
     }
   }
 };

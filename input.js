@@ -122,51 +122,81 @@ class WechatAPI {
   }
 
   async uploadMultipart(url, blob, fieldName) {
-    // 使用 Obsidian 的 requestUrl 绕过 CORS
     const { requestUrl } = require('obsidian');
 
-    // 手动构建 Multipart Body
-    const boundary = '----ObsidianWechatConverterBoundary' + Math.random().toString(36).substring(2);
-    const arrayBuffer = await blob.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
+    // 获取真实的 MIME 类型和文件扩展名
+    const mimeType = blob.type || 'image/jpeg';
+    const ext = mimeType.includes('gif') ? 'gif' : mimeType.includes('png') ? 'png' : 'jpg';
 
-    // 构造头部
-    let header = `--${boundary}\r\n`;
-    header += `Content-Disposition: form-data; name="${fieldName}"; filename="image.jpg"\r\n`;
-    header += `Content-Type: image/jpeg\r\n\r\n`;
+    if (this.proxyUrl) {
+      // 通过代理发送：将文件转为 base64
+      const arrayBuffer = await blob.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const base64Data = btoa(binary);
 
-    // 构造尾部
-    const footer = `\r\n--${boundary}--\r\n`;
-
-    // 拼接 Buffer
-    const headerBytes = new TextEncoder().encode(header);
-    const footerBytes = new TextEncoder().encode(footer);
-
-    const bodyBytes = new Uint8Array(headerBytes.length + bytes.length + footerBytes.length);
-    bodyBytes.set(headerBytes, 0);
-    bodyBytes.set(bytes, headerBytes.length);
-    bodyBytes.set(footerBytes, headerBytes.length + bytes.length);
-
-    try {
-      const response = await requestUrl({
-        url: url,
+      const proxyResponse = await requestUrl({
+        url: this.proxyUrl,
         method: 'POST',
-        body: bodyBytes.buffer, // requestUrl 接受 ArrayBuffer
-        headers: {
-          'Content-Type': `multipart/form-data; boundary=${boundary}`
-        }
+        body: JSON.stringify({
+          url: url,
+          method: 'UPLOAD',  // 特殊标记，告诉代理这是文件上传
+          fileData: base64Data,
+          fileName: `image.${ext}`,
+          mimeType: mimeType,
+          fieldName: fieldName
+        }),
+        contentType: 'application/json'
       });
 
-      const data = response.json;
+      const data = proxyResponse.json;
       if (data.media_id || data.url) {
         return data;
       } else {
         throw new Error(`微信API报错: ${data.errmsg} (${data.errcode})`);
       }
-    } catch (error) {
-      // 处理 HTTP 错误或网络错误
-      console.error('Upload Error:', error);
-      throw new Error(`网络请求失败: ${error.message}`);
+    } else {
+      // 直连：原有逻辑
+      const boundary = '----ObsidianWechatConverterBoundary' + Math.random().toString(36).substring(2);
+      const arrayBuffer = await blob.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+
+      let header = `--${boundary}\r\n`;
+      header += `Content-Disposition: form-data; name="${fieldName}"; filename="image.${ext}"\r\n`;
+      header += `Content-Type: ${mimeType}\r\n\r\n`;
+      const footer = `\r\n--${boundary}--\r\n`;
+
+      const headerBytes = new TextEncoder().encode(header);
+      const footerBytes = new TextEncoder().encode(footer);
+
+      const bodyBytes = new Uint8Array(headerBytes.length + bytes.length + footerBytes.length);
+      bodyBytes.set(headerBytes, 0);
+      bodyBytes.set(bytes, headerBytes.length);
+      bodyBytes.set(footerBytes, headerBytes.length + bytes.length);
+
+      try {
+        const response = await requestUrl({
+          url: url,
+          method: 'POST',
+          body: bodyBytes.buffer,
+          headers: {
+            'Content-Type': `multipart/form-data; boundary=${boundary}`
+          }
+        });
+
+        const data = response.json;
+        if (data.media_id || data.url) {
+          return data;
+        } else {
+          throw new Error(`微信API报错: ${data.errmsg} (${data.errcode})`);
+        }
+      } catch (error) {
+        console.error('Upload Error:', error);
+        throw new Error(`网络请求失败: ${error.message}`);
+      }
     }
   }
 }

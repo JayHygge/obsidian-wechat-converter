@@ -100,17 +100,29 @@
        }
        try {
          const body = await request.json();
-         const { url, method = 'GET', data } = body;
+         const { url, method = 'GET', data, fileData, fileName, mimeType, fieldName } = body;
+         
          if (!url || !url.startsWith('https://api.weixin.qq.com/')) {
-           return new Response(JSON.stringify({ error: 'Invalid URL', received: url }), { 
-             status: 400, headers: { 'Content-Type': 'application/json' }
-           });
+           return new Response(JSON.stringify({ error: 'Invalid URL' }), { status: 400 });
          }
-         const fetchOptions = { method, headers: { 'Content-Type': 'application/json' } };
-         if (method !== 'GET' && data) {
-           fetchOptions.body = JSON.stringify(data);
+
+         let response;
+         if (method === 'UPLOAD' && fileData) {
+           // 文件上传：将 base64 转为二进制并构建 multipart
+           const binary = atob(fileData);
+           const bytes = new Uint8Array(binary.length);
+           for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+           
+           const formData = new FormData();
+           formData.append(fieldName || 'media', new Blob([bytes], { type: mimeType }), fileName);
+           response = await fetch(url, { method: 'POST', body: formData });
+         } else {
+           // 普通请求
+           const opts = { method, headers: { 'Content-Type': 'application/json' } };
+           if (method !== 'GET' && data) opts.body = JSON.stringify(data);
+           response = await fetch(url, opts);
          }
-         const response = await fetch(url, fetchOptions);
+
          const result = await response.json();
          return new Response(JSON.stringify(result), {
            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
