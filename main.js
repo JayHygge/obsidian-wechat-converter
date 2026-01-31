@@ -22,11 +22,20 @@ var DEFAULT_SETTINGS = {
   enableWatermark: false,
   showImageCaption: true,
   // 关闭水印时是否显示图片说明文字
+  // 多账号支持
+  wechatAccounts: [],
+  // [{ id, name, appId, appSecret }]
+  defaultAccountId: "",
+  // 旧字段保留用于迁移检测
   wechatAppId: "",
   wechatAppSecret: "",
   defaultCoverBase64: ""
   // 默认封面图
 };
+var MAX_ACCOUNTS = 5;
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
 var WechatAPI = class {
   constructor(appId, appSecret) {
     this.appId = appId;
@@ -251,7 +260,7 @@ var AppleStyleView = class extends ItemView {
     this.currentDocLabel = header.createEl("div", { cls: "apple-current-doc", text: "\u672A\u9009\u62E9\u6587\u6863" });
     const details = panel.createEl("details", { cls: "apple-settings-details" });
     details.open = false;
-    const summary = details.createEl("summary", { cls: "apple-settings-summary", text: "\u{1F3A8} \u6837\u5F0F\u8BBE\u7F6E" });
+    const summary = details.createEl("summary", { cls: "apple-settings-summary", text: "\u6837\u5F0F\u8BBE\u7F6E" });
     const settingsArea = details.createEl("div", { cls: "apple-settings-area" });
     this.createSection(settingsArea, "\u4E3B\u9898", (section) => {
       const grid = section.createEl("div", { cls: "apple-btn-grid" });
@@ -350,28 +359,55 @@ var AppleStyleView = class extends ItemView {
       toggle.createEl("span", { cls: "apple-toggle-slider" });
       checkbox.addEventListener("change", () => this.onCodeLineNumberChange(checkbox.checked));
     });
-    this.createCoverSection(settingsArea);
     const actions = panel.createEl("div", { cls: "apple-actions" });
-    const syncBtn = actions.createEl("button", {
-      cls: "apple-btn-secondary apple-btn-full",
-      text: "\u{1F680} \u4E00\u952E\u540C\u6B65\u5230\u8349\u7A3F\u7BB1",
-      style: "margin-bottom: 8px;"
-    });
-    syncBtn.addEventListener("click", () => this.onSyncToWechat());
+    const accounts = this.plugin.settings.wechatAccounts || [];
+    if (accounts.length > 0) {
+      const syncBtn = actions.createEl("button", {
+        cls: "apple-btn-secondary apple-btn-full",
+        text: "\u4E00\u952E\u540C\u6B65\u5230\u8349\u7A3F\u7BB1",
+        style: "margin-bottom: 8px;"
+      });
+      syncBtn.addEventListener("click", () => this.showSyncModal());
+    }
     const copyBtn = actions.createEl("button", {
       cls: "apple-btn-primary apple-btn-full",
-      // Full width
-      text: "\u{1F4CB} \u590D\u5236\u5230\u516C\u4F17\u53F7"
+      text: "\u590D\u5236\u5230\u516C\u4F17\u53F7"
     });
     this.copyBtn = copyBtn;
     copyBtn.addEventListener("click", () => this.copyHTML());
   }
   /**
-   * 创建封面设置区
+   * 创建账号选择器
    */
+  createAccountSelector(parent) {
+    const accounts = this.plugin.settings.wechatAccounts || [];
+    if (accounts.length === 0)
+      return;
+    const section = parent.createEl("div", { cls: "apple-setting-section wechat-account-selector" });
+    section.createEl("label", { cls: "apple-setting-label", text: "\u540C\u6B65\u8D26\u53F7" });
+    const select = section.createEl("select", { cls: "wechat-account-select" });
+    const defaultId = this.plugin.settings.defaultAccountId;
+    for (const account of accounts) {
+      const option = select.createEl("option", {
+        value: account.id,
+        text: account.id === defaultId ? `${account.name} (\u9ED8\u8BA4)` : account.name
+      });
+      if (account.id === defaultId) {
+        option.selected = true;
+      }
+    }
+    this.selectedAccountId = defaultId;
+    select.addEventListener("change", (e) => {
+      this.selectedAccountId = e.target.value;
+    });
+  }
+  /**
+     * 创建封面设置区
+  
+     */
   createCoverSection(parent) {
     const section = parent.createEl("div", { cls: "apple-setting-section" });
-    section.createEl("label", { cls: "apple-setting-label", text: "\u{1F5BC}\uFE0F \u5C01\u9762\u8BBE\u7F6E (\u4E00\u952E\u540C\u6B65\u7528)" });
+    section.createEl("label", { cls: "apple-setting-label", text: "\u5C01\u9762\u8BBE\u7F6E" });
     const content = section.createEl("div", { cls: "apple-setting-content" });
     this.coverPreview = content.createEl("div", { cls: "apple-cover-preview" });
     this.updateCoverPreview();
@@ -463,21 +499,102 @@ var AppleStyleView = class extends ItemView {
     builder(content);
   }
   /**
+   * 显示同步选项 Modal
+   */
+  showSyncModal() {
+    if (!this.currentHtml) {
+      new Notice("\u274C \u8BF7\u5148\u6253\u5F00\u4E00\u4E2A\u6587\u7AE0\u8FDB\u884C\u8F6C\u6362");
+      return;
+    }
+    const { Modal } = require("obsidian");
+    const modal = new Modal(this.app);
+    modal.titleEl.setText("\u540C\u6B65\u5230\u5FAE\u4FE1\u8349\u7A3F\u7BB1");
+    modal.contentEl.addClass("wechat-sync-modal");
+    const accounts = this.plugin.settings.wechatAccounts || [];
+    const defaultId = this.plugin.settings.defaultAccountId;
+    let selectedAccountId = defaultId;
+    let coverBase64 = this.sessionCoverBase64 || this.getFrontmatterCover() || this.plugin.settings.defaultCoverBase64;
+    const accountSection = modal.contentEl.createDiv({ cls: "wechat-modal-section" });
+    accountSection.createEl("label", { text: "\u8D26\u53F7", cls: "wechat-modal-label" });
+    const accountSelect = accountSection.createEl("select", { cls: "wechat-account-select" });
+    for (const account of accounts) {
+      const option = accountSelect.createEl("option", {
+        value: account.id,
+        text: account.id === defaultId ? `${account.name} (\u9ED8\u8BA4)` : account.name
+      });
+      if (account.id === defaultId)
+        option.selected = true;
+    }
+    accountSelect.addEventListener("change", (e) => {
+      selectedAccountId = e.target.value;
+    });
+    const coverSection = modal.contentEl.createDiv({ cls: "wechat-modal-section" });
+    coverSection.createEl("label", { text: "\u5C01\u9762\u56FE", cls: "wechat-modal-label" });
+    const coverContent = coverSection.createDiv({ cls: "wechat-modal-cover-content" });
+    const coverPreview = coverContent.createDiv({ cls: "wechat-modal-cover-preview" });
+    const updatePreview = () => {
+      coverPreview.empty();
+      if (coverBase64) {
+        coverPreview.createEl("img", { attr: { src: coverBase64 } });
+      } else {
+        coverPreview.createEl("span", { text: "\u672A\u8BBE\u7F6E\u5C01\u9762", cls: "wechat-modal-no-cover" });
+      }
+    };
+    updatePreview();
+    const coverBtns = coverContent.createDiv({ cls: "wechat-modal-cover-btns" });
+    const uploadBtn = coverBtns.createEl("button", { text: "\u4E0A\u4F20" });
+    uploadBtn.onclick = () => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file)
+          return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          coverBase64 = event.target.result;
+          this.sessionCoverBase64 = coverBase64;
+          updatePreview();
+        };
+        reader.readAsDataURL(file);
+      };
+      input.click();
+    };
+    const btnRow = modal.contentEl.createDiv({ cls: "wechat-modal-buttons" });
+    const cancelBtn = btnRow.createEl("button", { text: "\u53D6\u6D88" });
+    cancelBtn.onclick = () => modal.close();
+    const syncBtn = btnRow.createEl("button", { text: "\u5F00\u59CB\u540C\u6B65", cls: "mod-cta" });
+    syncBtn.onclick = async () => {
+      if (!coverBase64) {
+        new Notice("\u274C \u8BF7\u5148\u8BBE\u7F6E\u5C01\u9762\u56FE");
+        return;
+      }
+      modal.close();
+      this.selectedAccountId = selectedAccountId;
+      this.sessionCoverBase64 = coverBase64;
+      await this.onSyncToWechat();
+    };
+    modal.open();
+  }
+  /**
    * 处理同步到微信逻辑
    */
   async onSyncToWechat() {
-    const { wechatAppId, wechatAppSecret } = this.plugin.settings;
-    if (!wechatAppId || !wechatAppSecret) {
-      new Notice("\u274C \u8BF7\u5148\u5728\u63D2\u4EF6\u8BBE\u7F6E\u4E2D\u586B\u5199\u5FAE\u4FE1\u516C\u4F17\u53F7\u7684 AppID \u548C AppSecret");
+    const accounts = this.plugin.settings.wechatAccounts || [];
+    const accountId = this.selectedAccountId || this.plugin.settings.defaultAccountId;
+    const account = accounts.find((a) => a.id === accountId);
+    if (!account) {
+      new Notice("\u274C \u8BF7\u5148\u5728\u63D2\u4EF6\u8BBE\u7F6E\u4E2D\u6DFB\u52A0\u5FAE\u4FE1\u516C\u4F17\u53F7\u8D26\u53F7");
       return;
     }
     if (!this.currentHtml) {
       new Notice("\u274C \u8BF7\u5148\u6253\u5F00\u4E00\u4E2A\u6587\u7AE0\u8FDB\u884C\u8F6C\u6362");
       return;
     }
-    const notice = new Notice("\u{1F680} \u6B63\u5728\u51C6\u5907\u540C\u6B65\u5230\u5FAE\u4FE1...", 0);
+    const notice = new Notice(`\u{1F680} \u6B63\u5728\u4F7F\u7528 ${account.name} \u540C\u6B65...`, 0);
     try {
-      const api = new WechatAPI(wechatAppId, wechatAppSecret);
+      const api = new WechatAPI(account.appId, account.appSecret);
       notice.setMessage("\u{1F5BC}\uFE0F \u6B63\u5728\u5904\u7406\u5C01\u9762\u56FE...");
       const coverSrc = this.sessionCoverBase64 || this.getFrontmatterCover() || this.plugin.settings.defaultCoverBase64;
       if (!coverSrc) {
@@ -906,19 +1023,89 @@ var AppleStyleSettingTab = class extends PluginSettingTab {
       this.plugin.settings.showImageCaption = value;
       await this.plugin.saveSettings();
     }));
-    containerEl.createEl("h3", { text: "\u{1F680} \u5FAE\u4FE1\u516C\u4F17\u53F7\u540C\u6B65\u8BBE\u7F6E" });
+    containerEl.createEl("h3", { text: "\u{1F680} \u5FAE\u4FE1\u516C\u4F17\u53F7\u8D26\u53F7\u7BA1\u7406" });
     containerEl.createEl("p", {
-      text: "\u8BF7\u5728\u5FAE\u4FE1\u516C\u4F17\u53F7\u540E\u53F0 [\u8BBE\u7F6E\u4E0E\u5F00\u53D1] -> [\u57FA\u672C\u914D\u7F6E] \u4E2D\u83B7\u53D6\u76F8\u5173\u4FE1\u606F\uFF0C\u5E76\u786E\u4FDD\u5DF2\u5C06\u5F53\u524D IP \u52A0\u5165\u767D\u540D\u5355\u3002",
+      text: "\u8BF7\u5728\u5FAE\u4FE1\u516C\u4F17\u53F7\u540E\u53F0 [\u8BBE\u7F6E\u4E0E\u5F00\u53D1] -> [\u57FA\u672C\u914D\u7F6E] \u4E2D\u83B7\u53D6 AppID \u548C AppSecret\uFF0C\u5E76\u786E\u4FDD\u5DF2\u5C06\u5F53\u524D IP \u52A0\u5165\u767D\u540D\u5355\u3002",
       cls: "setting-item-description"
     });
-    new Setting(containerEl).setName("AppID").setDesc("\u5FAE\u4FE1\u516C\u4F17\u53F7\u5F00\u53D1\u8005\u51ED\u8BC1 ID").addText((text) => text.setPlaceholder("\u586B\u5199\u5C0F\u7A0B\u5E8F\u6216\u516C\u4F17\u53F7\u7684 AppID").setValue(this.plugin.settings.wechatAppId).onChange(async (value) => {
-      this.plugin.settings.wechatAppId = value.trim();
-      await this.plugin.saveSettings();
-    }));
-    new Setting(containerEl).setName("AppSecret").setDesc("\u5FAE\u4FE1\u516C\u4F17\u53F7\u5F00\u53D1\u8005\u51ED\u8BC1\u5BC6\u94A5 (\u6CE8\u610F: \u5C06\u660E\u6587\u663E\u793A)").addText((text) => text.setPlaceholder("\u586B\u5199 AppSecret").setValue(this.plugin.settings.wechatAppSecret).onChange(async (value) => {
-      this.plugin.settings.wechatAppSecret = value.trim();
-      await this.plugin.saveSettings();
-    }));
+    const accounts = this.plugin.settings.wechatAccounts || [];
+    const defaultId = this.plugin.settings.defaultAccountId;
+    if (accounts.length === 0) {
+      containerEl.createEl("p", {
+        text: "\u6682\u65E0\u8D26\u53F7\uFF0C\u8BF7\u70B9\u51FB\u4E0B\u65B9\u6309\u94AE\u6DFB\u52A0",
+        cls: "setting-item-description",
+        attr: { style: "color: var(--text-muted); font-style: italic;" }
+      });
+    } else {
+      const listContainer = containerEl.createDiv({ cls: "wechat-account-list" });
+      for (const account of accounts) {
+        const isDefault = account.id === defaultId;
+        const card = listContainer.createDiv({ cls: "wechat-account-card" });
+        const info = card.createDiv({ cls: "wechat-account-info" });
+        const nameRow = info.createDiv({ cls: "wechat-account-name-row" });
+        nameRow.createSpan({ text: account.name, cls: "wechat-account-name" });
+        if (isDefault) {
+          nameRow.createSpan({ text: "\u9ED8\u8BA4", cls: "wechat-account-badge" });
+        }
+        info.createDiv({
+          text: `AppID: ${account.appId.substring(0, 8)}...`,
+          cls: "wechat-account-appid"
+        });
+        const actions = card.createDiv({ cls: "wechat-account-actions" });
+        if (!isDefault) {
+          const defaultBtn = actions.createEl("button", { text: "\u8BBE\u4E3A\u9ED8\u8BA4", cls: "wechat-btn-small" });
+          defaultBtn.onclick = async () => {
+            this.plugin.settings.defaultAccountId = account.id;
+            await this.plugin.saveSettings();
+            this.display();
+          };
+        }
+        const editBtn = actions.createEl("button", { text: "\u7F16\u8F91", cls: "wechat-btn-small" });
+        editBtn.onclick = () => this.showEditAccountModal(account);
+        const testBtn = actions.createEl("button", { text: "\u6D4B\u8BD5", cls: "wechat-btn-small wechat-btn-test" });
+        testBtn.onclick = async () => {
+          testBtn.disabled = true;
+          testBtn.textContent = "\u6D4B\u8BD5\u4E2D...";
+          try {
+            const api = new WechatAPI(account.appId, account.appSecret);
+            await api.getAccessToken();
+            new Notice(`\u2705 ${account.name} \u8FDE\u63A5\u6210\u529F\uFF01`);
+          } catch (err) {
+            new Notice(`\u274C ${account.name} \u8FDE\u63A5\u5931\u8D25: ${err.message}`);
+          }
+          testBtn.disabled = false;
+          testBtn.textContent = "\u6D4B\u8BD5";
+        };
+        const deleteBtn = actions.createEl("button", { text: "\u5220\u9664", cls: "wechat-btn-small wechat-btn-danger" });
+        deleteBtn.onclick = async () => {
+          if (confirm(`\u786E\u5B9A\u8981\u5220\u9664\u8D26\u53F7 "${account.name}" \u5417\uFF1F`)) {
+            this.plugin.settings.wechatAccounts = accounts.filter((a) => a.id !== account.id);
+            if (account.id === defaultId && this.plugin.settings.wechatAccounts.length > 0) {
+              this.plugin.settings.defaultAccountId = this.plugin.settings.wechatAccounts[0].id;
+            } else if (this.plugin.settings.wechatAccounts.length === 0) {
+              this.plugin.settings.defaultAccountId = "";
+            }
+            await this.plugin.saveSettings();
+            this.display();
+          }
+        };
+      }
+    }
+    const addBtnContainer = containerEl.createDiv({ cls: "wechat-add-account-container" });
+    if (accounts.length < MAX_ACCOUNTS) {
+      const addBtn = addBtnContainer.createEl("button", {
+        text: "+ \u6DFB\u52A0\u8D26\u53F7",
+        cls: "wechat-btn-add"
+      });
+      addBtn.onclick = () => this.showEditAccountModal(null);
+    } else {
+      addBtnContainer.createEl("p", {
+        text: `\u5DF2\u8FBE\u5230\u6700\u5927\u8D26\u53F7\u6570\u91CF (${MAX_ACCOUNTS})`,
+        cls: "setting-item-description",
+        attr: { style: "color: var(--text-muted);" }
+      });
+    }
+    containerEl.createEl("h4", { text: "\u{1F4F7} \u9ED8\u8BA4\u5C01\u9762\u56FE", attr: { style: "margin-top: 24px;" } });
     new Setting(containerEl).setName("\u9ED8\u8BA4\u5C01\u9762\u56FE").setDesc("\u540C\u6B65\u6587\u7AE0\u65F6\uFF0C\u5982\u679C\u672A\u624B\u52A8\u6307\u5B9A\u5C01\u9762\u4E14\u6587\u7AE0\u5185\u6CA1\u6709\u5C01\u9762\u5B57\u6BB5\uFF0C\u5C06\u4F7F\u7528\u6B64\u56FE").addButton((button) => button.setButtonText(this.plugin.settings.defaultCoverBase64 ? "\u66F4\u6362\u5C01\u9762" : "\u9009\u53D6\u56FE\u7247").onClick(() => {
       const input = document.createElement("input");
       input.type = "file";
@@ -944,6 +1131,88 @@ var AppleStyleSettingTab = class extends PluginSettingTab {
         this.display();
       }));
     }
+  }
+  /**
+   * 显示添加/编辑账号的模态框
+   */
+  showEditAccountModal(account) {
+    const { Modal } = require("obsidian");
+    const modal = new Modal(this.app);
+    modal.titleEl.setText(account ? "\u7F16\u8F91\u8D26\u53F7" : "\u6DFB\u52A0\u8D26\u53F7");
+    const form = modal.contentEl.createDiv();
+    const nameGroup = form.createDiv({ cls: "wechat-form-group" });
+    nameGroup.createEl("label", { text: "\u8D26\u53F7\u540D\u79F0" });
+    const nameInput = nameGroup.createEl("input", {
+      type: "text",
+      placeholder: "\u4F8B\u5982\uFF1A\u6211\u7684\u516C\u4F17\u53F7",
+      value: (account == null ? void 0 : account.name) || ""
+    });
+    const appIdGroup = form.createDiv({ cls: "wechat-form-group" });
+    appIdGroup.createEl("label", { text: "AppID" });
+    const appIdInput = appIdGroup.createEl("input", {
+      type: "text",
+      placeholder: "wx...",
+      value: (account == null ? void 0 : account.appId) || ""
+    });
+    const secretGroup = form.createDiv({ cls: "wechat-form-group" });
+    secretGroup.createEl("label", { text: "AppSecret" });
+    const secretInput = secretGroup.createEl("input", {
+      type: "password",
+      placeholder: "\u5F00\u53D1\u8005\u5BC6\u94A5",
+      value: (account == null ? void 0 : account.appSecret) || ""
+    });
+    const btnRow = form.createDiv({ cls: "wechat-modal-buttons" });
+    const cancelBtn = btnRow.createEl("button", { text: "\u53D6\u6D88" });
+    cancelBtn.onclick = () => modal.close();
+    const testBtn = btnRow.createEl("button", { text: "\u6D4B\u8BD5\u8FDE\u63A5", cls: "wechat-btn-test" });
+    testBtn.onclick = async () => {
+      if (!appIdInput.value || !secretInput.value) {
+        new Notice("\u8BF7\u586B\u5199 AppID \u548C AppSecret");
+        return;
+      }
+      testBtn.disabled = true;
+      testBtn.textContent = "\u6D4B\u8BD5\u4E2D...";
+      try {
+        const api = new WechatAPI(appIdInput.value.trim(), secretInput.value.trim());
+        await api.getAccessToken();
+        new Notice("\u2705 \u8FDE\u63A5\u6210\u529F\uFF01");
+      } catch (err) {
+        new Notice(`\u274C \u8FDE\u63A5\u5931\u8D25: ${err.message}`);
+      }
+      testBtn.disabled = false;
+      testBtn.textContent = "\u6D4B\u8BD5\u8FDE\u63A5";
+    };
+    const saveBtn = btnRow.createEl("button", { text: "\u4FDD\u5B58", cls: "mod-cta" });
+    saveBtn.onclick = async () => {
+      const name = nameInput.value.trim() || "\u672A\u547D\u540D\u8D26\u53F7";
+      const appId = appIdInput.value.trim();
+      const appSecret = secretInput.value.trim();
+      if (!appId || !appSecret) {
+        new Notice("\u8BF7\u586B\u5199 AppID \u548C AppSecret");
+        return;
+      }
+      if (account) {
+        account.name = name;
+        account.appId = appId;
+        account.appSecret = appSecret;
+      } else {
+        const newAccount = {
+          id: generateId(),
+          name,
+          appId,
+          appSecret
+        };
+        this.plugin.settings.wechatAccounts.push(newAccount);
+        if (this.plugin.settings.wechatAccounts.length === 1) {
+          this.plugin.settings.defaultAccountId = newAccount.id;
+        }
+      }
+      await this.plugin.saveSettings();
+      modal.close();
+      this.display();
+      new Notice(account ? "\u2705 \u8D26\u53F7\u5DF2\u66F4\u65B0" : "\u2705 \u8D26\u53F7\u5DF2\u6DFB\u52A0");
+    };
+    modal.open();
   }
 };
 var AppleStylePlugin = class extends Plugin {
@@ -988,6 +1257,20 @@ var AppleStylePlugin = class extends Plugin {
   }
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    if (this.settings.wechatAppId && this.settings.wechatAccounts.length === 0) {
+      const migratedAccount = {
+        id: generateId(),
+        name: "\u6211\u7684\u516C\u4F17\u53F7",
+        appId: this.settings.wechatAppId,
+        appSecret: this.settings.wechatAppSecret
+      };
+      this.settings.wechatAccounts.push(migratedAccount);
+      this.settings.defaultAccountId = migratedAccount.id;
+      this.settings.wechatAppId = "";
+      this.settings.wechatAppSecret = "";
+      await this.saveSettings();
+      console.log("\u2705 \u5DF2\u5C06\u65E7\u8D26\u53F7\u914D\u7F6E\u8FC1\u79FB\u5230\u65B0\u683C\u5F0F");
+    }
   }
   async saveSettings() {
     await this.saveData(this.settings);

@@ -566,3 +566,334 @@ body.theme-dark .apple-toggle-input:checked+.apple-toggle-slider,
     flex-direction: column;
   }
 }
+
+/* ========================================
+   多账号管理样式
+   ======================================== */
+.wechat-account-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.wechat-account-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  transition: all 0.15s ease;
+}
+
+.wechat-account-card:hover {
+  border-color: var(--interactive-accent);
+  box-shadow: 0 2px 8px rgba(0, 113, 227, 0.08);
+}
+
+.wechat-account-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wechat-account-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wechat-account-name {
+  font-weight: 600;
+  color: var(--text-normal);
+  font-size: 14px;
+}
+
+.wechat-account-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: white;
+  background: var(--interactive-accent);
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+.wechat-account-appid {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-monospace);
+}
+
+.wechat-account-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.wechat-btn-small {
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wechat-btn-small:hover {
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+}
+
+.wechat-btn-small:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wechat-btn-test {
+  color: var(--text-success);
+  border-color: var(--text-success);
+}
+
+.wechat-btn-test:hover {
+  background: rgba(52, 199, 89, 0.1);
+}
+
+.wechat-btn-danger {
+  color: var(--text-error);
+  border-color: var(--text-error);
+}
+
+.wechat-btn-danger:hover {
+  background: rgba(255, 59, 48, 0.1);
+}
+
+.wechat-add-account-container {
+  margin: 16px 0;
+}
+
+.wechat-btn-add {
+  width: 100%;
+  padding: 10px;
+  border: 2px dashed var(--background-modifier-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wechat-btn-add:hover {
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+  background: rgba(0, 113, 227, 0.05);
+}
+
+/* 模态框表单样式 */
+.wechat-form-group {
+  margin-bottom: 16px;
+}
+
+.wechat-form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-normal);
+  margin-bottom: 6px;
+}
+
+.wechat-form-group input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  font-size: 14px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  transition: border-color 0.15s ease;
+}
+
+.wechat-form-group input:focus {
+  outline: none;
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px rgba(0, 113, 227, 0.1);
+}
+
+.wechat-modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.wechat-modal-buttons button {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wechat-modal-buttons button:not(.mod-cta):not(.wechat-btn-test) {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-muted);
+}
+
+.wechat-modal-buttons button:not(.mod-cta):not(.wechat-btn-test):hover {
+  border-color: var(--interactive-accent);
+  color: var(--text-normal);
+}
+
+.wechat-modal-buttons .wechat-btn-test {
+  background: transparent;
+  border: 1px solid var(--text-success);
+  color: var(--text-success);
+}
+
+.wechat-modal-buttons .wechat-btn-test:hover {
+  background: rgba(52, 199, 89, 0.1);
+}
+
+.wechat-modal-buttons .mod-cta {
+  background: var(--interactive-accent);
+  border: none;
+  color: white;
+}
+
+.wechat-modal-buttons .mod-cta:hover {
+  opacity: 0.9;
+}
+
+/* Side Panel 账号选择器 */
+.wechat-account-selector {
+  margin-bottom: 12px;
+}
+
+.wechat-account-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 13px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236e6e73' d='M2.5 4.5L6 8l3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px;
+}
+
+.theme-dark .wechat-account-select {
+  background-color: var(--background-secondary);
+  border-color: var(--background-modifier-border);
+  color: var(--text-normal);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23b3b3b3' d='M2.5 4.5L6 8l3.5-3.5'/%3E%3C/svg%3E");
+}
+
+.wechat-account-select:hover {
+  border-color: var(--interactive-accent);
+}
+
+/* ========================================
+   同步选项区
+   ======================================== */
+.apple-sync-options {
+  padding: var(--apple-spacing-md);
+  border-top: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+}
+
+.apple-sync-options .apple-setting-section {
+  margin-bottom: 12px;
+}
+
+.apple-sync-options .apple-setting-section:last-child {
+  margin-bottom: 0;
+}
+
+.apple-sync-options .apple-setting-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+/* ========================================
+   同步 Modal 样式
+   ======================================== */
+.wechat-sync-modal {
+  min-width: 320px;
+}
+
+.wechat-modal-section {
+  margin-bottom: 16px;
+}
+
+.wechat-modal-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-normal);
+  margin-bottom: 8px;
+}
+
+.wechat-modal-cover-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wechat-modal-cover-preview {
+  width: 80px;
+  height: 50px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background-secondary);
+}
+
+.wechat-modal-cover-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.wechat-modal-no-cover {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.wechat-modal-cover-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.wechat-modal-cover-btns button {
+  padding: 4px 12px;
+  font-size: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  cursor: pointer;
+}
+
+.wechat-modal-cover-btns button:hover {
+  border-color: var(--interactive-accent);
+}

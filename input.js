@@ -17,10 +17,22 @@ const DEFAULT_SETTINGS = {
   avatarBase64: '',  // Base64 编码的本地头像，优先级高于 avatarUrl
   enableWatermark: false,
   showImageCaption: true,  // 关闭水印时是否显示图片说明文字
+  // 多账号支持
+  wechatAccounts: [],  // [{ id, name, appId, appSecret }]
+  defaultAccountId: '',
+  // 旧字段保留用于迁移检测
   wechatAppId: '',
   wechatAppSecret: '',
   defaultCoverBase64: '', // 默认封面图
 };
+
+// 账号上限
+const MAX_ACCOUNTS = 5;
+
+// 生成唯一 ID
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
 
 /**
  * 🚀 微信公众号 API 对接模块
@@ -319,7 +331,7 @@ class AppleStyleView extends ItemView {
     // 设置区域 (使用 details 折叠以节省空间)
     const details = panel.createEl('details', { cls: 'apple-settings-details' });
     details.open = false; // 默认折叠
-    const summary = details.createEl('summary', { cls: 'apple-settings-summary', text: '🎨 样式设置' });
+    const summary = details.createEl('summary', { cls: 'apple-settings-summary', text: '样式设置' });
     const settingsArea = details.createEl('div', { cls: 'apple-settings-area' });
 
     // === 主题选择 ===
@@ -444,33 +456,68 @@ class AppleStyleView extends ItemView {
       checkbox.addEventListener('change', () => this.onCodeLineNumberChange(checkbox.checked));
     });
 
-    // === 封面设置 (一键同步用) ===
-    this.createCoverSection(settingsArea);
-
     // === 操作按钮 ===
     const actions = panel.createEl('div', { cls: 'apple-actions' });
 
-    const syncBtn = actions.createEl('button', {
-      cls: 'apple-btn-secondary apple-btn-full',
-      text: '🚀 一键同步到草稿箱',
-      style: 'margin-bottom: 8px;'
-    });
-    syncBtn.addEventListener('click', () => this.onSyncToWechat());
+    // 只有配置了账号才显示同步按钮
+    const accounts = this.plugin.settings.wechatAccounts || [];
+    if (accounts.length > 0) {
+      const syncBtn = actions.createEl('button', {
+        cls: 'apple-btn-secondary apple-btn-full',
+        text: '一键同步到草稿箱',
+        style: 'margin-bottom: 8px;'
+      });
+      syncBtn.addEventListener('click', () => this.showSyncModal());
+    }
 
     const copyBtn = actions.createEl('button', {
-      cls: 'apple-btn-primary apple-btn-full', // Full width
-      text: '📋 复制到公众号',
+      cls: 'apple-btn-primary apple-btn-full',
+      text: '复制到公众号',
     });
-    this.copyBtn = copyBtn; // Store reference for feedback
+    this.copyBtn = copyBtn;
     copyBtn.addEventListener('click', () => this.copyHTML());
+  }
+
+
+
+  /**
+   * 创建账号选择器
+   */
+  createAccountSelector(parent) {
+    const accounts = this.plugin.settings.wechatAccounts || [];
+    if (accounts.length === 0) return;
+
+    const section = parent.createEl('div', { cls: 'apple-setting-section wechat-account-selector' });
+    section.createEl('label', { cls: 'apple-setting-label', text: '同步账号' });
+
+    const select = section.createEl('select', { cls: 'wechat-account-select' });
+
+    const defaultId = this.plugin.settings.defaultAccountId;
+
+    for (const account of accounts) {
+      const option = select.createEl('option', {
+        value: account.id,
+        text: account.id === defaultId ? `${account.name} (默认)` : account.name
+      });
+      if (account.id === defaultId) {
+        option.selected = true;
+      }
+    }
+
+    // 保存选中的账号 ID 到实例属性
+    this.selectedAccountId = defaultId;
+    select.addEventListener('change', (e) => {
+      this.selectedAccountId = e.target.value;
+    });
   }
 
   /**
    * 创建封面设置区
+
    */
   createCoverSection(parent) {
     const section = parent.createEl('div', { cls: 'apple-setting-section' });
-    section.createEl('label', { cls: 'apple-setting-label', text: '🖼️ 封面设置 (一键同步用)' });
+    section.createEl('label', { cls: 'apple-setting-label', text: '封面设置' });
     const content = section.createEl('div', { cls: 'apple-setting-content' });
 
     this.coverPreview = content.createEl('div', { cls: 'apple-cover-preview' });
@@ -572,12 +619,110 @@ class AppleStyleView extends ItemView {
   }
 
   /**
+   * 显示同步选项 Modal
+   */
+  showSyncModal() {
+    if (!this.currentHtml) {
+      new Notice('❌ 请先打开一个文章进行转换');
+      return;
+    }
+
+    const { Modal } = require('obsidian');
+    const modal = new Modal(this.app);
+    modal.titleEl.setText('同步到微信草稿箱');
+    modal.contentEl.addClass('wechat-sync-modal');
+
+    const accounts = this.plugin.settings.wechatAccounts || [];
+    const defaultId = this.plugin.settings.defaultAccountId;
+    let selectedAccountId = defaultId;
+    let coverBase64 = this.sessionCoverBase64 || this.getFrontmatterCover() || this.plugin.settings.defaultCoverBase64;
+
+    // 账号选择器
+    const accountSection = modal.contentEl.createDiv({ cls: 'wechat-modal-section' });
+    accountSection.createEl('label', { text: '账号', cls: 'wechat-modal-label' });
+    const accountSelect = accountSection.createEl('select', { cls: 'wechat-account-select' });
+
+    for (const account of accounts) {
+      const option = accountSelect.createEl('option', {
+        value: account.id,
+        text: account.id === defaultId ? `${account.name} (默认)` : account.name
+      });
+      if (account.id === defaultId) option.selected = true;
+    }
+    accountSelect.addEventListener('change', (e) => {
+      selectedAccountId = e.target.value;
+    });
+
+    // 封面设置
+    const coverSection = modal.contentEl.createDiv({ cls: 'wechat-modal-section' });
+    coverSection.createEl('label', { text: '封面图', cls: 'wechat-modal-label' });
+
+    const coverContent = coverSection.createDiv({ cls: 'wechat-modal-cover-content' });
+    const coverPreview = coverContent.createDiv({ cls: 'wechat-modal-cover-preview' });
+
+    const updatePreview = () => {
+      coverPreview.empty();
+      if (coverBase64) {
+        coverPreview.createEl('img', { attr: { src: coverBase64 } });
+      } else {
+        coverPreview.createEl('span', { text: '未设置封面', cls: 'wechat-modal-no-cover' });
+      }
+    };
+    updatePreview();
+
+    const coverBtns = coverContent.createDiv({ cls: 'wechat-modal-cover-btns' });
+    const uploadBtn = coverBtns.createEl('button', { text: '上传' });
+    uploadBtn.onclick = () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          coverBase64 = event.target.result;
+          this.sessionCoverBase64 = coverBase64;
+          updatePreview();
+        };
+        reader.readAsDataURL(file);
+      };
+      input.click();
+    };
+
+    // 操作按钮
+    const btnRow = modal.contentEl.createDiv({ cls: 'wechat-modal-buttons' });
+
+    const cancelBtn = btnRow.createEl('button', { text: '取消' });
+    cancelBtn.onclick = () => modal.close();
+
+    const syncBtn = btnRow.createEl('button', { text: '开始同步', cls: 'mod-cta' });
+    syncBtn.onclick = async () => {
+      if (!coverBase64) {
+        new Notice('❌ 请先设置封面图');
+        return;
+      }
+      modal.close();
+      this.selectedAccountId = selectedAccountId;
+      this.sessionCoverBase64 = coverBase64;
+      await this.onSyncToWechat();
+    };
+
+    modal.open();
+  }
+
+  /**
    * 处理同步到微信逻辑
    */
   async onSyncToWechat() {
-    const { wechatAppId, wechatAppSecret } = this.plugin.settings;
-    if (!wechatAppId || !wechatAppSecret) {
-      new Notice('❌ 请先在插件设置中填写微信公众号的 AppID 和 AppSecret');
+
+    // 获取选中的账号（优先使用下拉选择，否则用默认账号）
+    const accounts = this.plugin.settings.wechatAccounts || [];
+    const accountId = this.selectedAccountId || this.plugin.settings.defaultAccountId;
+    const account = accounts.find(a => a.id === accountId);
+
+    if (!account) {
+      new Notice('❌ 请先在插件设置中添加微信公众号账号');
       return;
     }
 
@@ -586,10 +731,10 @@ class AppleStyleView extends ItemView {
       return;
     }
 
-    const notice = new Notice('🚀 正在准备同步到微信...', 0);
+    const notice = new Notice(`🚀 正在使用 ${account.name} 同步...`, 0);
 
     try {
-      const api = new WechatAPI(wechatAppId, wechatAppSecret);
+      const api = new WechatAPI(account.appId, account.appSecret);
 
       // 1. 获取封面图
       notice.setMessage('🖼️ 正在处理封面图...');
@@ -1146,33 +1291,107 @@ class AppleStyleSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    containerEl.createEl('h3', { text: '🚀 微信公众号同步设置' });
+
+    containerEl.createEl('h3', { text: '🚀 微信公众号账号管理' });
     containerEl.createEl('p', {
-      text: '请在微信公众号后台 [设置与开发] -> [基本配置] 中获取相关信息，并确保已将当前 IP 加入白名单。',
+      text: '请在微信公众号后台 [设置与开发] -> [基本配置] 中获取 AppID 和 AppSecret，并确保已将当前 IP 加入白名单。',
       cls: 'setting-item-description'
     });
 
-    new Setting(containerEl)
-      .setName('AppID')
-      .setDesc('微信公众号开发者凭证 ID')
-      .addText(text => text
-        .setPlaceholder('填写小程序或公众号的 AppID')
-        .setValue(this.plugin.settings.wechatAppId)
-        .onChange(async (value) => {
-          this.plugin.settings.wechatAppId = value.trim();
-          await this.plugin.saveSettings();
-        }));
+    // 账号列表
+    const accounts = this.plugin.settings.wechatAccounts || [];
+    const defaultId = this.plugin.settings.defaultAccountId;
 
-    new Setting(containerEl)
-      .setName('AppSecret')
-      .setDesc('微信公众号开发者凭证密钥 (注意: 将明文显示)')
-      .addText(text => text
-        .setPlaceholder('填写 AppSecret')
-        .setValue(this.plugin.settings.wechatAppSecret)
-        .onChange(async (value) => {
-          this.plugin.settings.wechatAppSecret = value.trim();
-          await this.plugin.saveSettings();
-        }));
+    if (accounts.length === 0) {
+      containerEl.createEl('p', {
+        text: '暂无账号，请点击下方按钮添加',
+        cls: 'setting-item-description',
+        attr: { style: 'color: var(--text-muted); font-style: italic;' }
+      });
+    } else {
+      const listContainer = containerEl.createDiv({ cls: 'wechat-account-list' });
+
+      for (const account of accounts) {
+        const isDefault = account.id === defaultId;
+        const card = listContainer.createDiv({ cls: 'wechat-account-card' });
+
+        // 账号信息
+        const info = card.createDiv({ cls: 'wechat-account-info' });
+        const nameRow = info.createDiv({ cls: 'wechat-account-name-row' });
+        nameRow.createSpan({ text: account.name, cls: 'wechat-account-name' });
+        if (isDefault) {
+          nameRow.createSpan({ text: '默认', cls: 'wechat-account-badge' });
+        }
+        info.createDiv({
+          text: `AppID: ${account.appId.substring(0, 8)}...`,
+          cls: 'wechat-account-appid'
+        });
+
+        // 操作按钮
+        const actions = card.createDiv({ cls: 'wechat-account-actions' });
+
+        if (!isDefault) {
+          const defaultBtn = actions.createEl('button', { text: '设为默认', cls: 'wechat-btn-small' });
+          defaultBtn.onclick = async () => {
+            this.plugin.settings.defaultAccountId = account.id;
+            await this.plugin.saveSettings();
+            this.display();
+          };
+        }
+
+        const editBtn = actions.createEl('button', { text: '编辑', cls: 'wechat-btn-small' });
+        editBtn.onclick = () => this.showEditAccountModal(account);
+
+        const testBtn = actions.createEl('button', { text: '测试', cls: 'wechat-btn-small wechat-btn-test' });
+        testBtn.onclick = async () => {
+          testBtn.disabled = true;
+          testBtn.textContent = '测试中...';
+          try {
+            const api = new WechatAPI(account.appId, account.appSecret);
+            await api.getAccessToken();
+            new Notice(`✅ ${account.name} 连接成功！`);
+          } catch (err) {
+            new Notice(`❌ ${account.name} 连接失败: ${err.message}`);
+          }
+          testBtn.disabled = false;
+          testBtn.textContent = '测试';
+        };
+
+        const deleteBtn = actions.createEl('button', { text: '删除', cls: 'wechat-btn-small wechat-btn-danger' });
+        deleteBtn.onclick = async () => {
+          if (confirm(`确定要删除账号 "${account.name}" 吗？`)) {
+            this.plugin.settings.wechatAccounts = accounts.filter(a => a.id !== account.id);
+            // 如果删除的是默认账号，自动选择第一个
+            if (account.id === defaultId && this.plugin.settings.wechatAccounts.length > 0) {
+              this.plugin.settings.defaultAccountId = this.plugin.settings.wechatAccounts[0].id;
+            } else if (this.plugin.settings.wechatAccounts.length === 0) {
+              this.plugin.settings.defaultAccountId = '';
+            }
+            await this.plugin.saveSettings();
+            this.display();
+          }
+        };
+      }
+    }
+
+    // 添加账号按钮
+    const addBtnContainer = containerEl.createDiv({ cls: 'wechat-add-account-container' });
+    if (accounts.length < MAX_ACCOUNTS) {
+      const addBtn = addBtnContainer.createEl('button', {
+        text: '+ 添加账号',
+        cls: 'wechat-btn-add'
+      });
+      addBtn.onclick = () => this.showEditAccountModal(null);
+    } else {
+      addBtnContainer.createEl('p', {
+        text: `已达到最大账号数量 (${MAX_ACCOUNTS})`,
+        cls: 'setting-item-description',
+        attr: { style: 'color: var(--text-muted);' }
+      });
+    }
+
+    // 默认封面图设置
+    containerEl.createEl('h4', { text: '📷 默认封面图', attr: { style: 'margin-top: 24px;' } });
 
     new Setting(containerEl)
       .setName('默认封面图')
@@ -1209,6 +1428,108 @@ class AppleStyleSettingTab extends PluginSettingTab {
             this.display();
           }));
     }
+  }
+
+  /**
+   * 显示添加/编辑账号的模态框
+   */
+  showEditAccountModal(account) {
+    const { Modal } = require('obsidian');
+    const modal = new Modal(this.app);
+    modal.titleEl.setText(account ? '编辑账号' : '添加账号');
+
+    const form = modal.contentEl.createDiv();
+
+    // 账号名称
+    const nameGroup = form.createDiv({ cls: 'wechat-form-group' });
+    nameGroup.createEl('label', { text: '账号名称' });
+    const nameInput = nameGroup.createEl('input', {
+      type: 'text',
+      placeholder: '例如：我的公众号',
+      value: account?.name || ''
+    });
+
+    // AppID
+    const appIdGroup = form.createDiv({ cls: 'wechat-form-group' });
+    appIdGroup.createEl('label', { text: 'AppID' });
+    const appIdInput = appIdGroup.createEl('input', {
+      type: 'text',
+      placeholder: 'wx...',
+      value: account?.appId || ''
+    });
+
+    // AppSecret
+    const secretGroup = form.createDiv({ cls: 'wechat-form-group' });
+    secretGroup.createEl('label', { text: 'AppSecret' });
+    const secretInput = secretGroup.createEl('input', {
+      type: 'password',
+      placeholder: '开发者密钥',
+      value: account?.appSecret || ''
+    });
+
+    // 按钮区
+    const btnRow = form.createDiv({ cls: 'wechat-modal-buttons' });
+
+    const cancelBtn = btnRow.createEl('button', { text: '取消' });
+    cancelBtn.onclick = () => modal.close();
+
+    const testBtn = btnRow.createEl('button', { text: '测试连接', cls: 'wechat-btn-test' });
+    testBtn.onclick = async () => {
+      if (!appIdInput.value || !secretInput.value) {
+        new Notice('请填写 AppID 和 AppSecret');
+        return;
+      }
+      testBtn.disabled = true;
+      testBtn.textContent = '测试中...';
+      try {
+        const api = new WechatAPI(appIdInput.value.trim(), secretInput.value.trim());
+        await api.getAccessToken();
+        new Notice('✅ 连接成功！');
+      } catch (err) {
+        new Notice(`❌ 连接失败: ${err.message}`);
+      }
+      testBtn.disabled = false;
+      testBtn.textContent = '测试连接';
+    };
+
+    const saveBtn = btnRow.createEl('button', { text: '保存', cls: 'mod-cta' });
+    saveBtn.onclick = async () => {
+      const name = nameInput.value.trim() || '未命名账号';
+      const appId = appIdInput.value.trim();
+      const appSecret = secretInput.value.trim();
+
+      if (!appId || !appSecret) {
+        new Notice('请填写 AppID 和 AppSecret');
+        return;
+      }
+
+      if (account) {
+        // 编辑现有账号
+        account.name = name;
+        account.appId = appId;
+        account.appSecret = appSecret;
+      } else {
+        // 添加新账号
+        const newAccount = {
+          id: generateId(),
+          name,
+          appId,
+          appSecret
+        };
+        this.plugin.settings.wechatAccounts.push(newAccount);
+        // 如果是第一个账号，自动设为默认
+        if (this.plugin.settings.wechatAccounts.length === 1) {
+          this.plugin.settings.defaultAccountId = newAccount.id;
+        }
+      }
+
+      await this.plugin.saveSettings();
+      modal.close();
+      this.display();
+      new Notice(account ? '✅ 账号已更新' : '✅ 账号已添加');
+    };
+
+    modal.open();
   }
 }
 
@@ -1271,6 +1592,23 @@ class AppleStylePlugin extends Plugin {
 
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+
+    // 数据迁移：将旧的单账号格式迁移到新的多账号格式
+    if (this.settings.wechatAppId && this.settings.wechatAccounts.length === 0) {
+      const migratedAccount = {
+        id: generateId(),
+        name: '我的公众号',
+        appId: this.settings.wechatAppId,
+        appSecret: this.settings.wechatAppSecret,
+      };
+      this.settings.wechatAccounts.push(migratedAccount);
+      this.settings.defaultAccountId = migratedAccount.id;
+      // 清除旧字段
+      this.settings.wechatAppId = '';
+      this.settings.wechatAppSecret = '';
+      await this.saveSettings();
+      console.log('✅ 已将旧账号配置迁移到新格式');
+    }
   }
 
   async saveSettings() {
