@@ -7,7 +7,7 @@
 
 只需一键，即可将您的 Markdown 笔记转换为符合微信生态美学、阅读体验极佳的 HTML，无论是代码块、引用、列表还是本地图片，都能完美呈现。
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![Obsidian](https://img.shields.io/badge/Obsidian-1.0.0+-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -26,7 +26,6 @@
 
 3.  **🖼️ 强大的本地图片支持 (Local Image Support)**
     - **打破图床限制**：完美支持 Obsidian 的本地图片引用（包括 `![[Wiki Link]]` 和 `![]()`）。
-
     - **头像上传**：支持直接上传本地图片作为作者头像，插件会自动转码为 Base64。
     - **强大的本地图片支持**：无论是相对路径、绝对路径还是 WikiLink，都能自动识别并压缩。
     - **GIF 动图支持**：针对 GIF 格式特别优化，自动绕过压缩流程，完美保留完整动画帧。
@@ -49,19 +48,15 @@
 
 ### 方法 1: 手动安装（推荐）
 
-1. 下载插件的完整文件夹 (包含 `main.js`, `manifest.json`, `styles.css` 以及 `lib/`, `themes/` 等资源)。
-2. 将文件夹放入 Obsidian vault 的 `.obsidian/plugins/` 目录中。
-3. 文件夹名称建议为 `wechat-converter`。
+1. 从 [GitHub Releases](https://github.com/DavidLam-oss/obsidian-wechat-converter/releases) 下载最新的插件包。
+2. 解压并将其中的文件夹放入 Obsidian vault 的 `.obsidian/plugins/wechat-converter/` 目录中。
+3. 确保文件夹内包含 `main.js`, `manifest.json`, `styles.css`, `converter.js`, `themes/` 以及 `lib/`。
 4. 重启 Obsidian 或在设置中刷新插件列表，并启用插件。
 
-### 方法 2: 从源码构建
+### 方法 2: 使用 BRAT
 
-```bash
-git clone https://github.com/DavidLam-oss/obsidian-wechat-converter
-cd obsidian-wechat-converter
-npm install
-npm run build
-```
+1. 安装 [BRAT](https://github.com/TfTHacker/obsidian42-brat) 插件。
+2. 添加 Beta 仓库: `DavidLam-oss/obsidian-wechat-converter`。
 
 ## 📖 使用方法
 
@@ -72,20 +67,28 @@ npm run build
 2. **预览与调整**
    - 插件会自动加载当前激活的笔记内容。
    - 在右侧面板中，您可以实时预览排版效果。
-   - 通过顶部和底部的控制栏，您可以自由切换主题、调整字号、设置主题色，甚至上传头像生成作者卡片。
 
 3. **一键复制**
    - 确认预览效果满意后，点击底部的 **[📋 复制到公众号]** 按钮。
-   - **智能处理提示**：如果您的文章包含本地图片，插件会自动进行压缩和转码，此时会有"正在处理"的友好提示，请稍候片刻（通常仅需秒级等待）。
    - 提示"已复制"后，直接在微信公众号后台编辑器中 `Ctrl/Cmd + V` 粘贴即可。
+
+## 🤝 贡献 (Contributing)
+
+欢迎提交 Issue 或 Pull Request！
+
+1. Fork 本仓库。
+2. 创建您的特性分支 (`git checkout -b feature/AmazingFeature`)。
+3. 提交您的更改 (`git commit -m 'Add some AmazingFeature'`)。
+4. 推送到分支 (`git push origin feature/AmazingFeature`)。
+5. 开启一个 Pull Request。
 
 ## 📄 许可证
 
-MIT License
+本项目采用 [MIT License](LICENSE) 开源。
 
 ## 👨‍💻 作者
 
-**林小卫很行**
+**林小卫很行 (DavidLam)**
 
 一名热衷于提升生产力的开发者与内容创作者。
-如果您在使用过程中有任何问题、建议或发现了 Bug，欢迎随时在 GitHub Issue 区留言反馈，或与我也联系。相信工具的力量，让创作更自由。
+如果您在使用过程中有任何问题、建议或发现了 Bug，欢迎随时在 GitHub Issue 区留言反馈。相信工具的力量，让创作更自由。

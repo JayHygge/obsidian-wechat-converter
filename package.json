@@ -14,7 +14,7 @@
 		"style",
 		"formatter"
 	],
-	"author": "Your Name",
+	"author": "林小卫很行 (DavidLam)",
 	"license": "MIT",
 	"devDependencies": {
 		"@types/node": "^16.11.6",
