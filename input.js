@@ -803,6 +803,9 @@ class AppleStyleView extends ItemView {
       notice.setMessage('📸 正在同步正文图片...');
       const processedHtml = await this.processAllImages(this.currentHtml, api);
 
+      // 2.5 清理 HTML 以适配微信编辑器
+      const cleanedHtml = this.cleanHtmlForDraft(processedHtml);
+
       // 3. 获取文章标题
       const activeFile = this.app.workspace.getActiveFile();
       const title = activeFile ? activeFile.basename : '无标题文章';
@@ -811,7 +814,7 @@ class AppleStyleView extends ItemView {
       notice.setMessage('📝 正在发送到微信草稿箱...');
       const article = {
         title: title.substring(0, 64),
-        content: processedHtml,
+        content: cleanedHtml,
         thumb_media_id: thumb_media_id,
         author: this.app.vault.getName() || '',
         digest: '一键同步自 Obsidian'
@@ -882,6 +885,216 @@ class AppleStyleView extends ItemView {
         console.warn('图片上传失败，跳过:', originalSrc, err);
       }
     }
+
+    return div.innerHTML;
+  }
+
+  /**
+   * 清理 HTML 以适配微信编辑器
+   * 微信编辑器对嵌套列表支持不佳，需要：
+   * 1. 处理嵌套列表父级 li 内的段落与行内内容（避免嵌套层级被打散）
+   * 2. 将深层嵌套列表转为伪列表（避免微信扁平化）
+   * 3. 移除嵌套 ul/ol 的 margin（避免被当成独立块）
+   * 4. 移除空的 li 元素和空白文本节点
+   */
+  cleanHtmlForDraft(html) {
+    const div = document.createElement('div');
+    div.innerHTML = html;
+
+    // 1. 处理包含嵌套列表的 li：移除直接子 p，并把前置行内内容包成块级 span
+    div.querySelectorAll('li').forEach(li => {
+      const hasNestedList = li.querySelector('ul, ol');
+      if (!hasNestedList) return;
+
+      // 1.1 解包直接子 p（避免微信将 p 与嵌套列表当成同级）
+      Array.from(li.children).forEach(child => {
+        if (child.tagName === 'P') {
+          while (child.firstChild) {
+            li.insertBefore(child.firstChild, child);
+          }
+          child.remove();
+        }
+      });
+
+      // 1.2 将嵌套列表前的行内节点包裹为块级 span，稳定层级结构
+      const firstList = Array.from(li.children).find(child => child.tagName === 'UL' || child.tagName === 'OL');
+      if (!firstList) return;
+
+      const nodesBeforeList = [];
+      for (let node = li.firstChild; node && node !== firstList; node = node.nextSibling) {
+        nodesBeforeList.push(node);
+      }
+
+      const meaningfulNodes = nodesBeforeList.filter(node =>
+        !(node.nodeType === Node.TEXT_NODE && !node.textContent.trim())
+      );
+
+      if (meaningfulNodes.length === 0) return;
+
+      const blockTags = new Set(['UL', 'OL', 'TABLE', 'PRE', 'BLOCKQUOTE', 'SECTION', 'FIGURE', 'DIV']);
+      const hasBlock = meaningfulNodes.some(node =>
+        node.nodeType === Node.ELEMENT_NODE && blockTags.has(node.tagName)
+      );
+
+      if (hasBlock) return;
+
+      const wrapper = document.createElement('span');
+      const liStyle = li.getAttribute('style') || '';
+      const lineHeightMatch = liStyle.match(/line-height:\s*[^;]+/i);
+      const lineHeight = lineHeightMatch ? `${lineHeightMatch[0]};` : '';
+      wrapper.setAttribute('style', `display:block;margin:0;padding:0;${lineHeight}`);
+
+      meaningfulNodes.forEach(node => wrapper.appendChild(node));
+      li.insertBefore(wrapper, firstList);
+    });
+
+    // 2. 将深层嵌套列表转为伪列表（仅处理 depth >= 2）
+    const getListDepth = list => {
+      let depth = 0;
+      let current = list.parentElement;
+      while (current) {
+        if (current.tagName === 'UL' || current.tagName === 'OL') depth += 1;
+        current = current.parentElement;
+      }
+      return depth;
+    };
+
+    const buildPseudoItems = (list, depth) => {
+      const fragment = document.createDocumentFragment();
+      const isOrdered = list.tagName === 'OL';
+      let index = 1;
+
+      Array.from(list.children).forEach(li => {
+        if (li.tagName !== 'LI') return;
+
+        const nestedLists = Array.from(li.children).filter(
+          child => child.tagName === 'UL' || child.tagName === 'OL'
+        );
+
+        const liStyle = li.getAttribute('style') || '';
+        const indent = Math.max(0, depth - 1) * 20;
+        const wrapper = document.createElement('p');
+        wrapper.setAttribute(
+          'style',
+          `${liStyle} margin:0 0 4px ${indent}px; padding:0;`
+        );
+
+        const contentNodes = [];
+        Array.from(li.childNodes).forEach(node => {
+          if (node.nodeType === Node.ELEMENT_NODE && (node.tagName === 'UL' || node.tagName === 'OL')) return;
+          if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'P') {
+            const children = Array.from(node.childNodes);
+            if (children.length && contentNodes.length) {
+              contentNodes.push(document.createTextNode(' '));
+            }
+            children.forEach(child => contentNodes.push(child));
+            return;
+          }
+          contentNodes.push(node);
+        });
+
+        // Trim leading whitespace-only text nodes to avoid bullets on separate lines.
+        while (
+          contentNodes.length > 0 &&
+          contentNodes[0].nodeType === Node.TEXT_NODE &&
+          !contentNodes[0].textContent.trim()
+        ) {
+          contentNodes.shift();
+        }
+        // If the first text node starts with a newline/indent, trim it to keep marker + text on one line.
+        if (contentNodes.length > 0 && contentNodes[0].nodeType === Node.TEXT_NODE) {
+          contentNodes[0].textContent = contentNodes[0].textContent.replace(/^\s+/, '');
+          if (!contentNodes[0].textContent) {
+            contentNodes.shift();
+          }
+        }
+
+        const hasContent = contentNodes.some(node => {
+          if (node.nodeType === Node.TEXT_NODE) return node.textContent.trim();
+          return true;
+        });
+
+        if (hasContent) {
+          contentNodes.forEach(node => {
+            if (node.nodeType !== Node.TEXT_NODE) return;
+            node.textContent = node.textContent.replace(/\s*\n\s*/g, ' ').replace(/\s{2,}/g, ' ');
+            if (!node.textContent.trim()) {
+              node.remove();
+            }
+          });
+
+          const markerText = isOrdered ? `${index}. ` : '• ';
+          const firstText = contentNodes.find(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+          if (firstText) {
+            firstText.textContent = markerText + firstText.textContent;
+          } else {
+            contentNodes.unshift(document.createTextNode(markerText));
+          }
+
+          contentNodes.forEach(node => wrapper.appendChild(node));
+          fragment.appendChild(wrapper);
+        }
+
+        nestedLists.forEach(nested => {
+          fragment.appendChild(buildPseudoItems(nested, depth + 1));
+        });
+
+        index += 1;
+      });
+
+      return fragment;
+    };
+
+    Array.from(div.querySelectorAll('ul, ol')).forEach(list => {
+      if (!div.contains(list)) return;
+      const depth = getListDepth(list);
+      if (depth < 2) return;
+      const fragment = buildPseudoItems(list, depth);
+      list.parentNode.insertBefore(fragment, list);
+      list.remove();
+    });
+
+    // 3. 处理嵌套的 ul/ol（在 li 内的列表）：移除 margin，调整缩进
+    div.querySelectorAll('li > ul, li > ol').forEach(nestedList => {
+      // 获取原有样式
+      let style = nestedList.getAttribute('style') || '';
+      // 移除 margin，保留其他样式
+      style = style.replace(/margin:\s*[^;]+;?/gi, '');
+      // 添加 margin: 0 确保紧贴父元素
+      style = 'margin: 0; ' + style;
+      nestedList.setAttribute('style', style);
+    });
+
+    // 4. 移除空的 li 元素
+    div.querySelectorAll('li').forEach(li => {
+      if (!li.textContent.trim() && li.querySelectorAll('img, ul, ol').length === 0) {
+        li.remove();
+      }
+    });
+
+    // 5. 移除 ul/ol 内的纯空白文本节点
+    div.querySelectorAll('ul, ol').forEach(list => {
+      Array.from(list.childNodes).forEach(node => {
+        if (node.nodeType === Node.TEXT_NODE && !node.textContent.trim()) {
+          node.remove();
+        }
+      });
+    });
+
+    // 6. 移除 li 内的多余换行/空白文本节点
+    div.querySelectorAll('li').forEach(li => {
+      Array.from(li.childNodes).forEach(node => {
+        if (node.nodeType === Node.TEXT_NODE && !node.textContent.trim()) {
+          node.remove();
+        }
+      });
+    });
+
+    // 调试：打印清理后的列表 HTML
+    console.log('=== cleanHtmlForDraft: Lists after cleanup ===');
+    div.querySelectorAll('ul, ol').forEach((list, i) => {
+      console.log(`List ${i}:`, list.outerHTML.substring(0, 400));
+    });
 
     return div.innerHTML;
   }
@@ -1097,8 +1310,11 @@ class AppleStyleView extends ItemView {
       // 返回 true 表示有图片被处理了
       const processed = await this.processImagesToDataURL(tempDiv);
 
+      // 清理 HTML 以适配微信编辑器（处理嵌套列表等）
+      const cleanedHtml = this.cleanHtmlForDraft(tempDiv.innerHTML);
+
       const text = tempDiv.textContent || '';
-      const htmlContent = tempDiv.innerHTML;
+      const htmlContent = cleanedHtml;
 
       if (navigator.clipboard && navigator.clipboard.write) {
         const clipboardItem = new ClipboardItem({

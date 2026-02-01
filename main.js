@@ -656,12 +656,13 @@ var AppleStyleView = class extends ItemView {
       const thumb_media_id = coverRes.media_id;
       notice.setMessage("\u{1F4F8} \u6B63\u5728\u540C\u6B65\u6B63\u6587\u56FE\u7247...");
       const processedHtml = await this.processAllImages(this.currentHtml, api);
+      const cleanedHtml = this.cleanHtmlForDraft(processedHtml);
       const activeFile = this.app.workspace.getActiveFile();
       const title = activeFile ? activeFile.basename : "\u65E0\u6807\u9898\u6587\u7AE0";
       notice.setMessage("\u{1F4DD} \u6B63\u5728\u53D1\u9001\u5230\u5FAE\u4FE1\u8349\u7A3F\u7BB1...");
       const article = {
         title: title.substring(0, 64),
-        content: processedHtml,
+        content: cleanedHtml,
         thumb_media_id,
         author: this.app.vault.getName() || "",
         digest: "\u4E00\u952E\u540C\u6B65\u81EA Obsidian"
@@ -717,6 +718,179 @@ var AppleStyleView = class extends ItemView {
         console.warn("\u56FE\u7247\u4E0A\u4F20\u5931\u8D25\uFF0C\u8DF3\u8FC7:", originalSrc, err);
       }
     }
+    return div.innerHTML;
+  }
+  /**
+   * 清理 HTML 以适配微信编辑器
+   * 微信编辑器对嵌套列表支持不佳，需要：
+   * 1. 处理嵌套列表父级 li 内的段落与行内内容（避免嵌套层级被打散）
+   * 2. 将深层嵌套列表转为伪列表（避免微信扁平化）
+   * 3. 移除嵌套 ul/ol 的 margin（避免被当成独立块）
+   * 4. 移除空的 li 元素和空白文本节点
+   */
+  cleanHtmlForDraft(html) {
+    const div = document.createElement("div");
+    div.innerHTML = html;
+    div.querySelectorAll("li").forEach((li) => {
+      const hasNestedList = li.querySelector("ul, ol");
+      if (!hasNestedList)
+        return;
+      Array.from(li.children).forEach((child) => {
+        if (child.tagName === "P") {
+          while (child.firstChild) {
+            li.insertBefore(child.firstChild, child);
+          }
+          child.remove();
+        }
+      });
+      const firstList = Array.from(li.children).find((child) => child.tagName === "UL" || child.tagName === "OL");
+      if (!firstList)
+        return;
+      const nodesBeforeList = [];
+      for (let node = li.firstChild; node && node !== firstList; node = node.nextSibling) {
+        nodesBeforeList.push(node);
+      }
+      const meaningfulNodes = nodesBeforeList.filter(
+        (node) => !(node.nodeType === Node.TEXT_NODE && !node.textContent.trim())
+      );
+      if (meaningfulNodes.length === 0)
+        return;
+      const blockTags = /* @__PURE__ */ new Set(["UL", "OL", "TABLE", "PRE", "BLOCKQUOTE", "SECTION", "FIGURE", "DIV"]);
+      const hasBlock = meaningfulNodes.some(
+        (node) => node.nodeType === Node.ELEMENT_NODE && blockTags.has(node.tagName)
+      );
+      if (hasBlock)
+        return;
+      const wrapper = document.createElement("span");
+      const liStyle = li.getAttribute("style") || "";
+      const lineHeightMatch = liStyle.match(/line-height:\s*[^;]+/i);
+      const lineHeight = lineHeightMatch ? `${lineHeightMatch[0]};` : "";
+      wrapper.setAttribute("style", `display:block;margin:0;padding:0;${lineHeight}`);
+      meaningfulNodes.forEach((node) => wrapper.appendChild(node));
+      li.insertBefore(wrapper, firstList);
+    });
+    const getListDepth = (list) => {
+      let depth = 0;
+      let current = list.parentElement;
+      while (current) {
+        if (current.tagName === "UL" || current.tagName === "OL")
+          depth += 1;
+        current = current.parentElement;
+      }
+      return depth;
+    };
+    const buildPseudoItems = (list, depth) => {
+      const fragment = document.createDocumentFragment();
+      const isOrdered = list.tagName === "OL";
+      let index = 1;
+      Array.from(list.children).forEach((li) => {
+        if (li.tagName !== "LI")
+          return;
+        const nestedLists = Array.from(li.children).filter(
+          (child) => child.tagName === "UL" || child.tagName === "OL"
+        );
+        const liStyle = li.getAttribute("style") || "";
+        const indent = Math.max(0, depth - 1) * 20;
+        const wrapper = document.createElement("p");
+        wrapper.setAttribute(
+          "style",
+          `${liStyle} margin:0 0 4px ${indent}px; padding:0;`
+        );
+        const contentNodes = [];
+        Array.from(li.childNodes).forEach((node) => {
+          if (node.nodeType === Node.ELEMENT_NODE && (node.tagName === "UL" || node.tagName === "OL"))
+            return;
+          if (node.nodeType === Node.ELEMENT_NODE && node.tagName === "P") {
+            const children = Array.from(node.childNodes);
+            if (children.length && contentNodes.length) {
+              contentNodes.push(document.createTextNode(" "));
+            }
+            children.forEach((child) => contentNodes.push(child));
+            return;
+          }
+          contentNodes.push(node);
+        });
+        while (contentNodes.length > 0 && contentNodes[0].nodeType === Node.TEXT_NODE && !contentNodes[0].textContent.trim()) {
+          contentNodes.shift();
+        }
+        if (contentNodes.length > 0 && contentNodes[0].nodeType === Node.TEXT_NODE) {
+          contentNodes[0].textContent = contentNodes[0].textContent.replace(/^\\s+/, "");
+          if (!contentNodes[0].textContent) {
+            contentNodes.shift();
+          }
+        }
+        const hasContent = contentNodes.some((node) => {
+          if (node.nodeType === Node.TEXT_NODE)
+            return node.textContent.trim();
+          return true;
+        });
+        if (hasContent) {
+          contentNodes.forEach((node) => {
+            if (node.nodeType !== Node.TEXT_NODE)
+              return;
+            node.textContent = node.textContent.replace(/\\s*\\n\\s*/g, " ").replace(/\\s{2,}/g, " ");
+            if (!node.textContent.trim()) {
+              node.remove();
+            }
+          });
+          const markerText = isOrdered ? `${index}. ` : "\u2022 ";
+          const firstText = contentNodes.find(
+            (node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim()
+          );
+          if (firstText) {
+            firstText.textContent = markerText + firstText.textContent;
+          } else {
+            contentNodes.unshift(document.createTextNode(markerText));
+          }
+          contentNodes.forEach((node) => wrapper.appendChild(node));
+          fragment.appendChild(wrapper);
+        }
+        nestedLists.forEach((nested) => {
+          fragment.appendChild(buildPseudoItems(nested, depth + 1));
+        });
+        index += 1;
+      });
+      return fragment;
+    };
+    Array.from(div.querySelectorAll("ul, ol")).forEach((list) => {
+      if (!div.contains(list))
+        return;
+      const depth = getListDepth(list);
+      if (depth < 2)
+        return;
+      const fragment = buildPseudoItems(list, depth);
+      list.parentNode.insertBefore(fragment, list);
+      list.remove();
+    });
+    div.querySelectorAll("li > ul, li > ol").forEach((nestedList) => {
+      let style = nestedList.getAttribute("style") || "";
+      style = style.replace(/margin:\s*[^;]+;?/gi, "");
+      style = "margin: 0; " + style;
+      nestedList.setAttribute("style", style);
+    });
+    div.querySelectorAll("li").forEach((li) => {
+      if (!li.textContent.trim() && li.querySelectorAll("img, ul, ol").length === 0) {
+        li.remove();
+      }
+    });
+    div.querySelectorAll("ul, ol").forEach((list) => {
+      Array.from(list.childNodes).forEach((node) => {
+        if (node.nodeType === Node.TEXT_NODE && !node.textContent.trim()) {
+          node.remove();
+        }
+      });
+    });
+    div.querySelectorAll("li").forEach((li) => {
+      Array.from(li.childNodes).forEach((node) => {
+        if (node.nodeType === Node.TEXT_NODE && !node.textContent.trim()) {
+          node.remove();
+        }
+      });
+    });
+    console.log("=== cleanHtmlForDraft: Lists after cleanup ===");
+    div.querySelectorAll("ul, ol").forEach((list, i) => {
+      console.log(`List ${i}:`, list.outerHTML.substring(0, 400));
+    });
     return div.innerHTML;
   }
   // === 设置变更处理 ===
@@ -904,8 +1078,9 @@ var AppleStyleView = class extends ItemView {
       const tempDiv = document.createElement("div");
       tempDiv.innerHTML = this.currentHtml;
       const processed = await this.processImagesToDataURL(tempDiv);
+      const cleanedHtml = this.cleanHtmlForDraft(tempDiv.innerHTML);
       const text = tempDiv.textContent || "";
-      const htmlContent = tempDiv.innerHTML;
+      const htmlContent = cleanedHtml;
       if (navigator.clipboard && navigator.clipboard.write) {
         const clipboardItem = new ClipboardItem({
           "text/html": new Blob([htmlContent], { type: "text/html" }),
