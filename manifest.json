@@ -3,7 +3,7 @@
 	"name": "Wechat Converter",
 	"version": "2.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "微信公众号排版工具，将 Markdown 转换为精美的 HTML 格式，一键复制粘贴到公众号编辑器",
+	"description": "微信公众号排版工具。Markdown 转精美 HTML，支持一键同步到草稿箱，多账号管理",
 	"author": "林小卫很行",
 	"authorUrl": "https://github.com/DavidLam-oss",
 	"isDesktopOnly": false
