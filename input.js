@@ -686,9 +686,11 @@ class AppleStyleView extends ItemView {
 
     const digestInput = digestSection.createEl('textarea', {
       cls: 'wechat-modal-digest-input',
-      placeholder: '留空则自动提取文章前 45 字',
-      value: autoDigest
+      placeholder: '留空则自动提取文章前 45 字'
     });
+    // Explicitly set the value to ensure it renders correctly in the textarea
+    digestInput.value = autoDigest;
+
     digestInput.rows = 3;
     digestInput.style.width = '100%';
     digestInput.style.resize = 'vertical';
@@ -698,7 +700,7 @@ class AppleStyleView extends ItemView {
     const charCount = digestSection.createEl('div', {
       cls: 'wechat-digest-count',
       text: `${digestInput.value.length}/120`,
-      style: 'text-align: right; font-size: 12px; color: var(--text-muted); margin-top: 4px;'
+      style: 'text-align: right; font-size: 11px; color: var(--text-muted); margin-top: 4px; opacity: 0.7;'
     });
 
     digestInput.addEventListener('input', () => {
