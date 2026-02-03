@@ -499,6 +499,15 @@ body.theme-dark .apple-toggle-input:checked+.apple-toggle-slider,
   background: #1e1e1e; /* 深灰色背景，突显白色手机 */
 }
 
+/* 深色模式下为手机增加高光边框，防止融为一体 */
+.theme-dark .apple-phone-frame {
+  box-shadow:
+    inset 0 0 0 2px #e5e5e5,
+    0 0 0 10px #1d1d1f,
+    0 0 0 11px rgba(255, 255, 255, 0.1), /* 1px 微弱高光外描边 */
+    0 40px 80px -20px rgba(0, 0, 0, 0.8); /* 更深的投影 */
+}
+
 .apple-phone-frame {
   /* === 核心修复：严格锁定尺寸，禁止变形 === */
   width: 375px !important;

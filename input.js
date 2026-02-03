@@ -328,6 +328,11 @@ class AppleStyleView extends ItemView {
     this.lastActiveFile = null;
     this.sessionCoverBase64 = ''; // 本次文章的临时封面
     this.sessionDigest = ''; // 本次同步的摘要
+
+    // 双向同步滚动互斥锁 (原子锁方案)
+    // isProgrammaticScroll: 标记下一次 scroll 事件是否由代码触发
+    // 用于区分"用户滚动"和"代码同步滚动"，彻底解决死循环和抖动问题
+    this.isProgrammaticScroll = false;
   }
 
   getViewType() {
@@ -445,44 +450,110 @@ class AppleStyleView extends ItemView {
   }
 
   /**
-   * 注册同步滚动 (Editor -> Preview)
+   * 注册同步滚动 (双向: Editor <-> Preview)
+   * 采用"原子锁"机制 + "差值检测"机制，彻底解决死循环和精度问题
    */
   registerScrollSync(activeView) {
     // 1. 清理旧的监听器
-    if (this.activeEditorScroller && this.scrollListener) {
-      this.activeEditorScroller.removeEventListener('scroll', this.scrollListener);
-      this.activeEditorScroller = null;
-      this.scrollListener = null;
+    if (this.activeEditorScroller && this.editorScrollListener) {
+      this.activeEditorScroller.removeEventListener('scroll', this.editorScrollListener);
     }
+    if (this.previewContainer && this.previewScrollListener) {
+      this.previewContainer.removeEventListener('scroll', this.previewScrollListener);
+    }
+
+    this.activeEditorScroller = null;
+    this.editorScrollListener = null;
+    this.previewScrollListener = null;
+
+    // 重置原子锁标志位
+    this.ignoreNextPreviewScroll = false;
+    this.ignoreNextEditorScroll = false;
 
     if (!activeView) return;
 
-    // 2. 获取新的 Scroller (CodeMirror 6 使用 .cm-scroller)
-    // contentEl 是 MarkdownView 的主要内容容器
-    const scroller = activeView.contentEl.querySelector('.cm-scroller');
-    if (!scroller) return;
+    // 2. 获取 Editor Scroller
+    const editorScroller = activeView.contentEl.querySelector('.cm-scroller');
+    if (!editorScroller) return;
+    this.activeEditorScroller = editorScroller;
 
-    this.activeEditorScroller = scroller;
+    // === Listener A: Editor -> Preview ===
+    this.editorScrollListener = () => {
+      // 可见性检查：插件未显示时，完全停止计算
+      if (!this.containerEl.isShown()) return;
 
-    // 3. 定义监听器
-    this.scrollListener = () => {
+      // 锁检查：如果是 Preview 带来的滚动，本次忽略，并重置锁
+      if (this.ignoreNextEditorScroll) {
+        this.ignoreNextEditorScroll = false;
+        return;
+      }
+
       if (!this.previewContainer) return;
 
-      // 计算滚动百分比
-      // scrollHeight - clientHeight = 可滚动距离
-      const editorScrollable = scroller.scrollHeight - scroller.clientHeight;
-      const previewScrollable = this.previewContainer.scrollHeight - this.previewContainer.clientHeight;
+      const editorHeight = editorScroller.scrollHeight - editorScroller.clientHeight;
+      const previewHeight = this.previewContainer.scrollHeight - this.previewContainer.clientHeight;
 
-      if (editorScrollable <= 0 || previewScrollable <= 0) return;
+      if (editorHeight <= 0 || previewHeight <= 0) return;
 
-      const ratio = scroller.scrollTop / editorScrollable;
+      // 计算目标位置
+      let targetScrollTop;
 
-      // 应用到预览区
-      this.previewContainer.scrollTop = ratio * previewScrollable;
+      // 端点严格对齐
+      if (editorScroller.scrollTop === 0) {
+        targetScrollTop = 0;
+      } else if (Math.abs(editorScroller.scrollTop - editorHeight) < 2) { // 放宽到底部判定
+        targetScrollTop = previewHeight;
+      } else {
+        const ratio = editorScroller.scrollTop / editorHeight;
+        targetScrollTop = ratio * previewHeight;
+      }
+
+      // 差值检测：只有当变化足够大时才应用，避免微小抖动和死循环
+      if (Math.abs(this.previewContainer.scrollTop - targetScrollTop) > 1) {
+        this.ignoreNextPreviewScroll = true; // 上锁：告诉 Preview 下次滚动是代码触发的
+        this.previewContainer.scrollTop = targetScrollTop;
+      }
+    };
+
+    // === Listener B: Preview -> Editor ===
+    this.previewScrollListener = () => {
+      // 可见性检查
+      if (!this.containerEl.isShown()) return;
+
+      // 锁检查
+      if (this.ignoreNextPreviewScroll) {
+        this.ignoreNextPreviewScroll = false;
+        return;
+      }
+
+      const editorHeight = editorScroller.scrollHeight - editorScroller.clientHeight;
+      const previewHeight = this.previewContainer.scrollHeight - this.previewContainer.clientHeight;
+
+      if (editorHeight <= 0 || previewHeight <= 0) return;
+
+      // 计算目标位置
+      let targetScrollTop;
+
+      // 端点严格对齐
+      if (this.previewContainer.scrollTop === 0) {
+        targetScrollTop = 0;
+      } else if (Math.abs(this.previewContainer.scrollTop - previewHeight) < 2) {
+        targetScrollTop = editorHeight;
+      } else {
+        const ratio = this.previewContainer.scrollTop / previewHeight;
+        targetScrollTop = ratio * editorHeight;
+      }
+
+      // 差值检测
+      if (Math.abs(editorScroller.scrollTop - targetScrollTop) > 1) {
+        this.ignoreNextEditorScroll = true; // 上锁
+        editorScroller.scrollTop = targetScrollTop;
+      }
     };
 
     // 4. 绑定监听 (使用 passive 提升性能)
-    scroller.addEventListener('scroll', this.scrollListener, { passive: true });
+    editorScroller.addEventListener('scroll', this.editorScrollListener, { passive: true });
+    this.previewContainer.addEventListener('scroll', this.previewScrollListener, { passive: true });
   }
 
   /**
