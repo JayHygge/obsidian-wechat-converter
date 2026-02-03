@@ -311,6 +311,9 @@ ${macHeader}
   fixMathJaxTags(html) {
     if (!html.includes('mjx-container')) return html;
 
+    // Fix: Remove assistive MathML (hidden text that shows up in WeChat)
+    html = html.replace(/<mjx-assistive-mml[^>]*>[\s\S]*?<\/mjx-assistive-mml>/gi, '');
+
     // Replace <mjx-container> with <section> (block) or <span> (inline)
     // WeChat strips custom tags like mjx-container but keeps SVG content
     return html.replace(/<mjx-container([^>]*)>(.*?)<\/mjx-container>/gs, (match, attrs, content) => {
