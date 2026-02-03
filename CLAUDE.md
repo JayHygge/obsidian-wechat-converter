@@ -20,9 +20,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     - `converter.js`: Handles Markdown to WeChat-compatible HTML conversion.
     - `styles.css`: Base plugin styles.
     - `themes/`: Contains specific visual themes (Simple, Classic, Elegant).
-    - `lib/`: Helper libraries.
-- **Build System**: `esbuild` via `esbuild.config.mjs`.
-    - Bundles dependencies while externalizing Obsidian and CodeMirror packages.
+    - `lib/`: Helper libraries (including the dynamically loaded `mathjax-plugin.js`).
+- **Build System**:
+    - **Main Bundle**: `esbuild` via `esbuild.config.mjs` (Targets `main.js`).
+    - **Math Bundle**: `esbuild` via `esbuild.math.mjs` (Targets `lib/mathjax-plugin.js`).
     - Targets `es2018` / CommonJS.
 - **WeChat Integration**:
     - Supports syncing to WeChat Drafts.
@@ -35,3 +36,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **External Dependencies**: `obsidian`, `electron`, and `@codemirror/*` packages are peer dependencies provided by the Obsidian app.
 - **UI/UX**: The plugin adds a ribbon icon and a command "Open Wechat Converter". It uses a side panel for live preview.
 - **Image Handling**: Special attention is needed for local image paths (absolute/relative/WikiLink) and GIF handling (size limits).
+
+## Best Practices & Lessons Learned (v2.1 Math Update)
+
+### 1. Bundling & Dependencies
+- **Avoid Dynamic Requires**: Libraries that use `require(path.join(__dirname, 'package.json'))` will crash in Obsidian. Use `esbuild`'s `define` to inject static versions or mock the file system if possible.
+- **ESM vs CJS**: When bundling CJS libraries (like `markdown-it` plugins), be wary of default exports. Always check `module.default || module`.
+- **Rebuild Requirement**: `input.js` is the source for `main.js`. **ANY change to `input.js` requires `npm run build` to take effect.** Restarting the plugin is not enough if you haven't rebuilt.
+
+### 2. WeChat Compatibility
+- **Zero-CSS Strategy**: WeChat strips `<style>` and class-based styling. All visual elements must be inline styles or self-contained SVGs.
+- **MathJax Config**: For math formulas to work in WeChat, **MUST** use `svg: { fontCache: 'none' }`. This forces paths to be embedded in the SVG, preventing reliance on external font definitions which get stripped.
+- **Assistive Text**: MathJax generates hidden `<mjx-assistive-mml>` for screen readers. WeChat strips the "hidden" CSS, making this text visible. **MUST** explicitly strip these tags before syncing.
+
+### 3. Architecture (Dynamic Loading)
+- **Separate Bundles**: Heavy features (like MathJax) are bundled separately (`lib/mathjax-plugin.js`) and loaded via `eval()` in `input.js` only when needed.
+- **Global Scope**: When `eval`-ing code, do not assume `window` is available or writable in the same way. Use a safe global resolver (`const _global = typeof window ...`) to export functions from the dynamic bundle.
