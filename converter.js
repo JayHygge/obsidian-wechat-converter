@@ -287,7 +287,9 @@ ${macHeader}
   async convert(markdown) {
     if (!this.md) await this.initMarkdownIt();
 
-
+    // 修复：移除块级公式 $$ 前面的缩进，避免被误识别为代码块
+    // 仅匹配行首的空白 + $$，不影响其他缩进
+    markdown = markdown.replace(/^[\t ]+(\$\$)/gm, '$1');
 
     // Pre-process: Convert Wiki-links ![[...]] to standard images ![](...)
     // Regex: ![[path|alt]] or ![[path]]
