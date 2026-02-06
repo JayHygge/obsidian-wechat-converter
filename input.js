@@ -963,7 +963,7 @@ class AppleStyleView extends ItemView {
    */
   showSyncModal() {
     if (!this.currentHtml) {
-      new Notice('❌ 请先打开一个文章进行转换');
+      new Notice('⚠️ 请先打开一个文章进行转换');
       return;
     }
 
@@ -1705,28 +1705,27 @@ class AppleStyleView extends ItemView {
     if (this.isCopying) return;
 
     if (!this.currentHtml) {
-      if (this.copyBtn) {
-        const originalText = this.copyBtn.innerHTML;
-        this.copyBtn.setText('⚠️ 请先转换文档');
-        setTimeout(() => { if (this.copyBtn) this.copyBtn.innerHTML = originalText; }, 2000);
-      }
+      new Notice('⚠️ 请先打开一个文章进行转换');
       return;
     }
-
-    const originalText = this.copyBtn.innerHTML;
 
     this.isCopying = true;
     if (this.copyBtn) {
       this.copyBtn.classList.add('active'); // 可选：保持高亮状态
-      // 不再修改文字，保持图标按钮的极简性
     }
 
     try {
-      new Notice('⏳ 正在处理图片...'); // Toast 提示
-
       // 创建临时的 DOM 容器来解析和处理图片
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = this.currentHtml;
+
+      // 优化提示逻辑：只有确实需要处理图片时才显示 "正在处理..."
+      const images = Array.from(tempDiv.querySelectorAll('img'));
+      const localImages = images.filter(img => img.src.startsWith('app://'));
+
+      if (localImages.length > 0) {
+        new Notice('⏳ 正在处理图片...');
+      }
 
       // 处理本地图片：转换为 JPEG Base64
       // 返回 true 表示有图片被处理了

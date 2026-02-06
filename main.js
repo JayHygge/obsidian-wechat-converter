@@ -1320,25 +1320,21 @@ var AppleStyleView = class extends ItemView {
     if (this.isCopying)
       return;
     if (!this.currentHtml) {
-      if (this.copyBtn) {
-        const originalText2 = this.copyBtn.innerHTML;
-        this.copyBtn.setText("\u26A0\uFE0F \u8BF7\u5148\u8F6C\u6362\u6587\u6863");
-        setTimeout(() => {
-          if (this.copyBtn)
-            this.copyBtn.innerHTML = originalText2;
-        }, 2e3);
-      }
+      new Notice("\u26A0\uFE0F \u8BF7\u5148\u6253\u5F00\u4E00\u4E2A\u6587\u7AE0\u8FDB\u884C\u8F6C\u6362");
       return;
     }
-    const originalText = this.copyBtn.innerHTML;
     this.isCopying = true;
     if (this.copyBtn) {
       this.copyBtn.classList.add("active");
     }
     try {
-      new Notice("\u23F3 \u6B63\u5728\u5904\u7406\u56FE\u7247...");
       const tempDiv = document.createElement("div");
       tempDiv.innerHTML = this.currentHtml;
+      const images = Array.from(tempDiv.querySelectorAll("img"));
+      const localImages = images.filter((img) => img.src.startsWith("app://"));
+      if (localImages.length > 0) {
+        new Notice("\u23F3 \u6B63\u5728\u5904\u7406\u56FE\u7247...");
+      }
       const processed = await this.processImagesToDataURL(tempDiv);
       const cleanedHtml = this.cleanHtmlForDraft(tempDiv.innerHTML);
       const text = tempDiv.textContent || "";
