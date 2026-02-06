@@ -335,6 +335,10 @@ class AppleStyleView extends ItemView {
     // isProgrammaticScroll: 标记下一次 scroll 事件是否由代码触发
     // 用于区分"用户滚动"和"代码同步滚动"，彻底解决死循环和抖动问题
     this.isProgrammaticScroll = false;
+
+    // 状态缓存：Map<FilePath, { coverBase64, digest }>
+    // 用于在不关闭插件面板的情况下，切换文章或关闭弹窗后保留封面和摘要
+    this.articleStates = new Map();
   }
 
   getViewType() {
@@ -879,11 +883,25 @@ class AppleStyleView extends ItemView {
     modal.titleEl.setText('同步到微信草稿箱');
     modal.contentEl.addClass('wechat-sync-modal');
 
+    // 获取当前活动文件的路径，用于状态缓存
+    const activeFile = this.app.workspace.getActiveFile();
+    const currentPath = activeFile ? activeFile.path : null;
+
+    // 尝试从缓存读取状态
+    let cachedState = null;
+    if (currentPath && this.articleStates.has(currentPath)) {
+      cachedState = this.articleStates.get(currentPath);
+    }
+
     const accounts = this.plugin.settings.wechatAccounts || [];
     const defaultId = this.plugin.settings.defaultAccountId;
     let selectedAccountId = defaultId;
-    // 逻辑变更: 默认只提取文章第一张图，无全局默认，无 frontmatter
-    let coverBase64 = this.sessionCoverBase64 || this.getFirstImageFromArticle();
+
+    // 封面逻辑：优先使用缓存 -> 否则提取文章第一张图
+    let coverBase64 = cachedState?.coverBase64 || this.getFirstImageFromArticle();
+
+    // 更新 sessionCoverBase64 以便 onSyncToWechat 使用
+    this.sessionCoverBase64 = coverBase64;
 
     // 账号选择器
     const accountSection = modal.contentEl.createDiv({ cls: 'wechat-modal-section' });
@@ -959,12 +977,15 @@ class AppleStyleView extends ItemView {
     // 使用 innerText 可以更好地处理换行，但为了安全起见，还是用 textContent 并清理空格
     const autoDigest = (tempDiv.textContent || '').replace(/\s+/g, ' ').trim().substring(0, 45);
 
+    // 摘要逻辑：优先使用缓存 -> 否则使用自动提取
+    const initialDigest = cachedState?.digest !== undefined ? cachedState.digest : autoDigest;
+
     const digestInput = digestSection.createEl('textarea', {
       cls: 'wechat-modal-digest-input',
       placeholder: '留空则自动提取文章前 45 字'
     });
     // Explicitly set the value to ensure it renders correctly in the textarea
-    digestInput.value = autoDigest;
+    digestInput.value = initialDigest;
 
     digestInput.rows = 3;
     digestInput.style.width = '100%';
@@ -978,8 +999,17 @@ class AppleStyleView extends ItemView {
       style: 'text-align: right; font-size: 11px; color: var(--text-muted); margin-top: 4px; opacity: 0.7;'
     });
 
+    // 实时更新缓存（摘要）
     digestInput.addEventListener('input', () => {
       charCount.setText(`${digestInput.value.length}/120`);
+      if (currentPath) {
+        const state = this.articleStates.get(currentPath) || {};
+        state.digest = digestInput.value.trim(); // 允许为空字符串（代表清空）
+        // 如果用户清空了输入框，我们存空字符串，以便下次打开也是空的（还是说回退到 auto?）
+        // 逻辑修正：如果用户清空，通常意味着想用默认或不发摘要。这里我们存用户输入的值。
+        // 但如果原本逻辑是"空则自动提取"，那这里输入框空的时候，sessionDigest 会变成 autoDigest
+        this.articleStates.set(currentPath, { ...state, digest: digestInput.value });
+      }
     });
 
     // 操作按钮
@@ -1003,6 +1033,31 @@ class AppleStyleView extends ItemView {
       // 传递用户输入的摘要，或使用自动提取的摘要
       this.sessionDigest = digestInput.value.trim() || autoDigest || '一键同步自 Obsidian';
       await this.onSyncToWechat();
+    };
+
+    // 实时更新缓存（封面图） - 需要修改 uploadBtn 的回调逻辑
+    uploadBtn.onclick = () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          coverBase64 = event.target.result;
+          this.sessionCoverBase64 = coverBase64;
+          updatePreview();
+
+          // 更新缓存
+          if (currentPath) {
+            const state = this.articleStates.get(currentPath) || {};
+            this.articleStates.set(currentPath, { ...state, coverBase64: coverBase64 });
+          }
+        };
+        reader.readAsDataURL(file);
+      };
+      input.click();
     };
 
     modal.open();
@@ -1743,6 +1798,12 @@ class AppleStyleView extends ItemView {
       this.previewContainer.removeEventListener('scroll', this.previewScrollListener);
     }
     this.previewContainer?.empty();
+
+    // 清理文章状态缓存
+    if (this.articleStates) {
+      this.articleStates.clear();
+    }
+
     console.log('🍎 转换器面板已关闭');
   }
 }

@@ -271,6 +271,7 @@ var AppleStyleView = class extends ItemView {
     this.sessionCoverBase64 = "";
     this.sessionDigest = "";
     this.isProgrammaticScroll = false;
+    this.articleStates = /* @__PURE__ */ new Map();
   }
   getViewType() {
     return APPLE_STYLE_VIEW;
@@ -679,10 +680,17 @@ var AppleStyleView = class extends ItemView {
     const modal = new Modal(this.app);
     modal.titleEl.setText("\u540C\u6B65\u5230\u5FAE\u4FE1\u8349\u7A3F\u7BB1");
     modal.contentEl.addClass("wechat-sync-modal");
+    const activeFile = this.app.workspace.getActiveFile();
+    const currentPath = activeFile ? activeFile.path : null;
+    let cachedState = null;
+    if (currentPath && this.articleStates.has(currentPath)) {
+      cachedState = this.articleStates.get(currentPath);
+    }
     const accounts = this.plugin.settings.wechatAccounts || [];
     const defaultId = this.plugin.settings.defaultAccountId;
     let selectedAccountId = defaultId;
-    let coverBase64 = this.sessionCoverBase64 || this.getFirstImageFromArticle();
+    let coverBase64 = (cachedState == null ? void 0 : cachedState.coverBase64) || this.getFirstImageFromArticle();
+    this.sessionCoverBase64 = coverBase64;
     const accountSection = modal.contentEl.createDiv({ cls: "wechat-modal-section" });
     accountSection.createEl("label", { text: "\u8D26\u53F7", cls: "wechat-modal-label" });
     const accountSelect = accountSection.createEl("select", { cls: "wechat-account-select" });
@@ -743,11 +751,12 @@ var AppleStyleView = class extends ItemView {
     const tempDiv = document.createElement("div");
     tempDiv.innerHTML = this.currentHtml || "";
     const autoDigest = (tempDiv.textContent || "").replace(/\s+/g, " ").trim().substring(0, 45);
+    const initialDigest = (cachedState == null ? void 0 : cachedState.digest) !== void 0 ? cachedState.digest : autoDigest;
     const digestInput = digestSection.createEl("textarea", {
       cls: "wechat-modal-digest-input",
       placeholder: "\u7559\u7A7A\u5219\u81EA\u52A8\u63D0\u53D6\u6587\u7AE0\u524D 45 \u5B57"
     });
-    digestInput.value = autoDigest;
+    digestInput.value = initialDigest;
     digestInput.rows = 3;
     digestInput.style.width = "100%";
     digestInput.style.resize = "vertical";
@@ -759,6 +768,11 @@ var AppleStyleView = class extends ItemView {
     });
     digestInput.addEventListener("input", () => {
       charCount.setText(`${digestInput.value.length}/120`);
+      if (currentPath) {
+        const state = this.articleStates.get(currentPath) || {};
+        state.digest = digestInput.value.trim();
+        this.articleStates.set(currentPath, { ...state, digest: digestInput.value });
+      }
     });
     const btnRow = modal.contentEl.createDiv({ cls: "wechat-modal-buttons" });
     const cancelBtn = btnRow.createEl("button", { text: "\u53D6\u6D88" });
@@ -775,6 +789,28 @@ var AppleStyleView = class extends ItemView {
       this.sessionCoverBase64 = coverBase64;
       this.sessionDigest = digestInput.value.trim() || autoDigest || "\u4E00\u952E\u540C\u6B65\u81EA Obsidian";
       await this.onSyncToWechat();
+    };
+    uploadBtn.onclick = () => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file)
+          return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          coverBase64 = event.target.result;
+          this.sessionCoverBase64 = coverBase64;
+          updatePreview();
+          if (currentPath) {
+            const state = this.articleStates.get(currentPath) || {};
+            this.articleStates.set(currentPath, { ...state, coverBase64 });
+          }
+        };
+        reader.readAsDataURL(file);
+      };
+      input.click();
     };
     modal.open();
   }
@@ -811,19 +847,9 @@ var AppleStyleView = class extends ItemView {
       const cleanedHtml = this.cleanHtmlForDraft(processedHtml);
       const activeFile = this.app.workspace.getActiveFile();
       const title = activeFile ? activeFile.basename : "\u65E0\u6807\u9898\u6587\u7AE0";
-      if (cleanedHtml.length > 1e5) {
-        const base64Count = (cleanedHtml.match(/src=["']data:image/g) || []).length;
-        let msg = `\u6587\u7AE0 HTML \u4EE3\u7801\u8FC7\u957F (${cleanedHtml.length} \u5B57\u7B26)\uFF0C\u53EF\u80FD\u8D85\u8FC7\u5FAE\u4FE1\u9650\u5236\u3002`;
-        if (base64Count > 0) {
-          msg += `
-
-\u274C \u8BCA\u65AD\uFF1A\u68C0\u6D4B\u5230 ${base64Count} \u5F20\u56FE\u7247\u672A\u6210\u529F\u4E0A\u4F20\uFF08\u4ECD\u4E3A Base64 \u683C\u5F0F\uFF09\uFF0C\u5BFC\u81F4\u4F53\u79EF\u81A8\u80C0\u3002\u5EFA\u8BAE\u68C0\u67E5\u7F51\u7EDC\u8FDE\u63A5\u5E76\u91CD\u8BD5\u3002`;
-        } else {
-          msg += `
-
-\u53EF\u80FD\u539F\u56E0\uFF1A\u5305\u542B\u5927\u91CF\u6570\u5B66\u516C\u5F0F\uFF0C\u6216 HTML \u6837\u5F0F\u8FC7\u4E8E\u5197\u4F59\u3002\u8BF7\u5C1D\u8BD5\u7CBE\u7B80\u5185\u5BB9\u3002`;
-        }
-        throw new Error(msg);
+      const base64Count = (cleanedHtml.match(/src=["']data:image/g) || []).length;
+      if (base64Count > 0) {
+        throw new Error(`\u68C0\u6D4B\u5230 ${base64Count} \u5F20\u56FE\u7247\u672A\u6210\u529F\u4E0A\u4F20\uFF08\u4ECD\u4E3A Base64 \u683C\u5F0F\uFF09\uFF0C\u8FD9\u4F1A\u5BFC\u81F4\u540C\u6B65\u5931\u8D25\u3002\u5EFA\u8BAE\u68C0\u67E5\u7F51\u7EDC\u8FDE\u63A5\u5E76\u91CD\u8BD5\u3002`);
       }
       notice.setMessage("\u{1F4DD} \u6B63\u5728\u53D1\u9001\u5230\u5FAE\u4FE1\u8349\u7A3F\u7BB1...");
       const article = {
@@ -839,7 +865,11 @@ var AppleStyleView = class extends ItemView {
     } catch (error) {
       notice.hide();
       console.error("Wechat Sync Error:", error);
-      new Notice(`\u274C \u540C\u6B65\u5931\u8D25: ${error.message}`);
+      let friendlyMsg = error.message;
+      if (error.message.includes("45002")) {
+        friendlyMsg = "\u6587\u7AE0\u5185\u5BB9\u8FC7\u957F\uFF08\u8D85\u8FC7\u5FAE\u4FE1\u63A5\u53E3\u9650\u5236\uFF09\u3002\u8BF7\u5C1D\u8BD5\u5206\u7BC7\u53D1\u9001\uFF0C\u6216\u51CF\u5C11\u590D\u6742\u7684\u6570\u5B66\u516C\u5F0F/SVG\u56FE\u7247\u3002";
+      }
+      new Notice(`\u274C \u540C\u6B65\u5931\u8D25: ${friendlyMsg}`);
     }
   }
   /**
@@ -1366,6 +1396,9 @@ var AppleStyleView = class extends ItemView {
       this.previewContainer.removeEventListener("scroll", this.previewScrollListener);
     }
     (_a = this.previewContainer) == null ? void 0 : _a.empty();
+    if (this.articleStates) {
+      this.articleStates.clear();
+    }
     console.log("\u{1F34E} \u8F6C\u6362\u5668\u9762\u677F\u5DF2\u5173\u95ED");
   }
 };
