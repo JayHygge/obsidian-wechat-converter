@@ -811,9 +811,9 @@ var AppleStyleView = class extends ItemView {
       const cleanedHtml = this.cleanHtmlForDraft(processedHtml);
       const activeFile = this.app.workspace.getActiveFile();
       const title = activeFile ? activeFile.basename : "\u65E0\u6807\u9898\u6587\u7AE0";
-      if (cleanedHtml.length > 2e4) {
+      if (cleanedHtml.length > 1e5) {
         const base64Count = (cleanedHtml.match(/src=["']data:image/g) || []).length;
-        let msg = `\u6587\u7AE0\u5185\u5BB9\u8FC7\u957F (${cleanedHtml.length} \u5B57\u7B26)\uFF0C\u8D85\u8FC7\u5FAE\u4FE1\u9650\u5236\u3002`;
+        let msg = `\u6587\u7AE0 HTML \u4EE3\u7801\u8FC7\u957F (${cleanedHtml.length} \u5B57\u7B26)\uFF0C\u53EF\u80FD\u8D85\u8FC7\u5FAE\u4FE1\u9650\u5236\u3002`;
         if (base64Count > 0) {
           msg += `
 
@@ -821,7 +821,7 @@ var AppleStyleView = class extends ItemView {
         } else {
           msg += `
 
-\u53EF\u80FD\u539F\u56E0\uFF1A\u5305\u542B\u5927\u91CF\u6570\u5B66\u516C\u5F0F\uFF0C\u6216\u6B63\u6587\u5185\u5BB9\u8FC7\u957F\uFF08\u8D85\u8FC7\u5FAE\u4FE1 20,000 \u5B57\u7B26\u9650\u5236\uFF09\u3002\u8BF7\u5C1D\u8BD5\u7CBE\u7B80\u5185\u5BB9\u3002`;
+\u53EF\u80FD\u539F\u56E0\uFF1A\u5305\u542B\u5927\u91CF\u6570\u5B66\u516C\u5F0F\uFF0C\u6216 HTML \u6837\u5F0F\u8FC7\u4E8E\u5197\u4F59\u3002\u8BF7\u5C1D\u8BD5\u7CBE\u7B80\u5185\u5BB9\u3002`;
         }
         throw new Error(msg);
       }

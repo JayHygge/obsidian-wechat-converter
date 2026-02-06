@@ -1059,19 +1059,11 @@ class AppleStyleView extends ItemView {
       const title = activeFile ? activeFile.basename : '无标题文章';
 
       // 4. 内容长度预检 (Pre-flight Check)
-      // 微信限制 content 长度不能超过 20,000 字符 (errcode 45002)
-      if (cleanedHtml.length > 20000) {
-        // 智能诊断：检查是否残留 Base64
-        const base64Count = (cleanedHtml.match(/src=["']data:image/g) || []).length;
-
-        let msg = `文章内容过长 (${cleanedHtml.length} 字符)，超过微信限制。`;
-        if (base64Count > 0) {
-          msg += `\n\n❌ 诊断：检测到 ${base64Count} 张图片未成功上传（仍为 Base64 格式），导致体积膨胀。建议检查网络连接并重试。`;
-        } else {
-          msg += `\n\n可能原因：包含大量数学公式，或正文内容过长（超过微信 20,000 字符限制）。请尝试精简内容。`;
-        }
-
-        throw new Error(msg);
+      // 微信官方对 content 长度的实际限制远大于 20,000，且主要取决于 JSON 包体大小。
+      // 因此移除硬编码的长度限制，仅检查 Base64 残留作为异常拦截。
+      const base64Count = (cleanedHtml.match(/src=["']data:image/g) || []).length;
+      if (base64Count > 0) {
+        throw new Error(`检测到 ${base64Count} 张图片未成功上传（仍为 Base64 格式），这会导致同步失败。建议检查网络连接并重试。`);
       }
 
       // 5. 创建草稿
@@ -1091,7 +1083,15 @@ class AppleStyleView extends ItemView {
     } catch (error) {
       notice.hide();
       console.error('Wechat Sync Error:', error);
-      new Notice(`❌ 同步失败: ${error.message}`);
+
+      let friendlyMsg = error.message;
+
+      // 捕获微信返回的内容长度错误 (45002) 并转换为友好提示
+      if (error.message.includes('45002')) {
+        friendlyMsg = '文章内容过长（超过微信接口限制）。请尝试分篇发送，或减少复杂的数学公式/SVG图片。';
+      }
+
+      new Notice(`❌ 同步失败: ${friendlyMsg}`);
     }
   }
 
