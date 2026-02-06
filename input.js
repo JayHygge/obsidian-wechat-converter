@@ -1421,13 +1421,16 @@ class AppleStyleView extends ItemView {
   async svgToPngBlob(svgElement, scale = 3) {
     return new Promise((resolve, reject) => {
       try {
-        // 1. 获取 SVG 原始逻辑尺寸 (用于在 img 标签上设置显示大小)
+        // 0. 克隆节点 (防止修改影响原 DOM)
+        // 解决 "Medium Risk": 失败回退时颜色污染问题
+        const clonedSvg = svgElement.cloneNode(true);
+
+        // 1. 获取 SVG 原始逻辑尺寸 (需用原节点获取尺寸，因为克隆节点未挂载)
         const rect = svgElement.getBoundingClientRect();
         let logicalWidth = rect.width;
         let logicalHeight = rect.height;
 
         // 尝试从属性获取更精确的值 (ex/em 单位)
-        // MathJax 通常会设置 width/height/style
         const rawWidth = svgElement.getAttribute('width');
         const rawHeight = svgElement.getAttribute('height');
         const rawStyle = svgElement.getAttribute('style');
@@ -1438,19 +1441,17 @@ class AppleStyleView extends ItemView {
            logicalHeight = parseFloat(rawHeight) || 20;
         }
 
-        // 2. 序列化 SVG
+        // 2. 序列化 SVG (操作克隆节点)
         // 智能改色策略：仅针对 MathJax 公式进行改色 (#333333)，保护 Mermaid 等其他 SVG 的原色
-        // MathJax 特征：通常有 focusable="false" 或者 role="img" 且没有具体 id (Mermaid 通常有 id)
-        // 或者直接判断是否已有 fill 属性且不是 currentColor
         const isMathJax = svgElement.getAttribute('role') === 'img' ||
                           svgElement.getAttribute('focusable') === 'false' ||
                           svgElement.classList.contains('MathJax');
 
         if (isMathJax) {
-            svgElement.setAttribute('fill', '#333333');
-            svgElement.style.color = '#333333';
+            clonedSvg.setAttribute('fill', '#333333');
+            clonedSvg.style.color = '#333333';
 
-            svgElement.querySelectorAll('*').forEach(el => {
+            clonedSvg.querySelectorAll('*').forEach(el => {
                 if (el.getAttribute('fill') === 'currentColor' || !el.getAttribute('fill')) {
                     el.setAttribute('fill', '#333333');
                 }
@@ -1461,7 +1462,7 @@ class AppleStyleView extends ItemView {
         }
 
         const serializer = new XMLSerializer();
-        const svgString = serializer.serializeToString(svgElement);
+        const svgString = serializer.serializeToString(clonedSvg);
         const svgBlob = new Blob([svgString], {type: 'image/svg+xml;charset=utf-8'});
         const url = URL.createObjectURL(svgBlob);
 
