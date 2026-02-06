@@ -41,7 +41,16 @@
 3.  **🎛 全新可视化设置面板 (Settings Panel)**
     - 告别繁琐的代码修改！我们内置了直观的设置面板，让您可以实时调整字体、字号、主题色等参数，一切尽在掌握。
 
-    ![插件设置面板](images/setting_panel.png)
+    <table>
+      <tr>
+        <th align="center">浅色模式</th>
+        <th align="center">深色模式</th>
+      </tr>
+      <tr>
+        <td align="center"><img src="images/setting_panel_light.png" height="500"/></td>
+        <td align="center"><img src="images/setting_panel_dark.png" height="500"/></td>
+      </tr>
+    </table>
 
 4.  **🎨 三大专家级主题 (Premade Themes)**
     - 内置 **简约 (Simple)**、**经典 (Classic)**、**优雅 (Elegant)** 三款精心设计的主题，覆盖从技术博客到人文随笔的各种场景。
