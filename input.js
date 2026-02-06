@@ -1462,8 +1462,8 @@ class AppleStyleView extends ItemView {
     div.querySelectorAll('li > ul, li > ol').forEach(nestedList => {
       // 获取原有样式
       let style = nestedList.getAttribute('style') || '';
-      // 移除 margin，保留其他样式
-      style = style.replace(/margin:\s*[^;]+;?/gi, '');
+      // 移除 margin，保留其他样式 (Fix: use regex that catches margin-left/top etc)
+      style = style.replace(/margin(-[a-z]+)?:\s*[^;]+;?/gi, '');
       // 添加 margin: 0 确保紧贴父元素
       style = 'margin: 0; ' + style;
       nestedList.setAttribute('style', style);
@@ -2317,3 +2317,5 @@ class AppleStylePlugin extends Plugin {
 }
 
 module.exports = AppleStylePlugin;
+module.exports.AppleStyleView = AppleStyleView;
+module.exports.WechatAPI = WechatAPI;

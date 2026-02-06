@@ -5,7 +5,9 @@
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
-		"build": "node esbuild.config.mjs production"
+		"build": "node esbuild.config.mjs production",
+		"test": "vitest",
+		"test:coverage": "vitest run --coverage"
 	},
 	"keywords": [
 		"obsidian",
@@ -18,11 +20,14 @@
 	"license": "MIT",
 	"devDependencies": {
 		"@types/node": "^16.11.6",
+		"@vitest/coverage-v8": "^4.0.18",
 		"builtin-modules": "^3.2.0",
 		"esbuild": "0.17.3",
+		"jsdom": "^28.0.0",
 		"obsidian": "latest",
 		"tslib": "2.4.0",
-		"typescript": "4.7.4"
+		"typescript": "4.7.4",
+		"vitest": "^4.0.18"
 	},
 	"dependencies": {
 		"markdown-it-mathjax3": "^4.3.2"
