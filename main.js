@@ -916,7 +916,7 @@ var AppleStyleView = class extends ItemView {
       console.error("Wechat Sync Error:", error);
       let friendlyMsg = error.message;
       if (error.message.includes("45002")) {
-        friendlyMsg = "\u6587\u7AE0\u5185\u5BB9\u8FC7\u957F\uFF08\u8D85\u8FC7\u5FAE\u4FE1\u63A5\u53E3\u9650\u5236\uFF09\u3002\u8BF7\u5C1D\u8BD5\u5206\u7BC7\u53D1\u9001\uFF0C\u6216\u51CF\u5C11\u590D\u6742\u7684\u6570\u5B66\u516C\u5F0F/SVG\u56FE\u7247\u3002";
+        friendlyMsg = "\u6587\u7AE0\u592A\u957F\uFF0C\u5FAE\u4FE1\u63A5\u53E3\u62D2\u6536\u3002\u5EFA\u8BAE\u5206\u7BC7\u53D1\u9001\uFF0C\u6216\u4F7F\u7528\u63D2\u4EF6\u9876\u90E8\u7684\u300C\u590D\u5236\u300D\u6309\u94AE\u624B\u52A8\u7C98\u8D34\u5230\u516C\u4F17\u53F7\u540E\u53F0\u3002";
       }
       new Notice(`\u274C \u540C\u6B65\u5931\u8D25: ${friendlyMsg}`);
     }
@@ -1053,16 +1053,19 @@ var AppleStyleView = class extends ItemView {
           logicalWidth = parseFloat(rawWidth) || 100;
           logicalHeight = parseFloat(rawHeight) || 20;
         }
-        svgElement.setAttribute("fill", "#333333");
-        svgElement.style.color = "#333333";
-        svgElement.querySelectorAll("*").forEach((el) => {
-          if (el.getAttribute("fill") === "currentColor" || !el.getAttribute("fill")) {
-            el.setAttribute("fill", "#333333");
-          }
-          if (el.getAttribute("stroke") === "currentColor") {
-            el.setAttribute("stroke", "#333333");
-          }
-        });
+        const isMathJax = svgElement.getAttribute("role") === "img" || svgElement.getAttribute("focusable") === "false" || svgElement.classList.contains("MathJax");
+        if (isMathJax) {
+          svgElement.setAttribute("fill", "#333333");
+          svgElement.style.color = "#333333";
+          svgElement.querySelectorAll("*").forEach((el) => {
+            if (el.getAttribute("fill") === "currentColor" || !el.getAttribute("fill")) {
+              el.setAttribute("fill", "#333333");
+            }
+            if (el.getAttribute("stroke") === "currentColor") {
+              el.setAttribute("stroke", "#333333");
+            }
+          });
+        }
         const serializer = new XMLSerializer();
         const svgString = serializer.serializeToString(svgElement);
         const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });

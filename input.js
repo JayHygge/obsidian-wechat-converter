@@ -1220,7 +1220,7 @@ class AppleStyleView extends ItemView {
 
       // 捕获微信返回的内容长度错误 (45002) 并转换为友好提示
       if (error.message.includes('45002')) {
-        friendlyMsg = '文章内容过长（超过微信接口限制）。请尝试分篇发送，或减少复杂的数学公式/SVG图片。';
+        friendlyMsg = '文章太长，微信接口拒收。建议分篇发送，或使用插件顶部的「复制」按钮手动粘贴到公众号后台。';
       }
 
       new Notice(`❌ 同步失败: ${friendlyMsg}`);
@@ -1411,19 +1411,26 @@ class AppleStyleView extends ItemView {
         }
 
         // 2. 序列化 SVG
-        // 强制修改 SVG 颜色为 #333333 (深灰)，使视觉效果更柔和
-        svgElement.setAttribute('fill', '#333333');
-        svgElement.style.color = '#333333'; // 针对 currentColor 属性
+        // 智能改色策略：仅针对 MathJax 公式进行改色 (#333333)，保护 Mermaid 等其他 SVG 的原色
+        // MathJax 特征：通常有 focusable="false" 或者 role="img" 且没有具体 id (Mermaid 通常有 id)
+        // 或者直接判断是否已有 fill 属性且不是 currentColor
+        const isMathJax = svgElement.getAttribute('role') === 'img' ||
+                          svgElement.getAttribute('focusable') === 'false' ||
+                          svgElement.classList.contains('MathJax');
 
-        // 同时也需遍历内部所有 path/rect 等元素，防止内联样式覆盖
-        svgElement.querySelectorAll('*').forEach(el => {
-            if (el.getAttribute('fill') === 'currentColor' || !el.getAttribute('fill')) {
-                el.setAttribute('fill', '#333333');
-            }
-            if (el.getAttribute('stroke') === 'currentColor') {
-                el.setAttribute('stroke', '#333333');
-            }
-        });
+        if (isMathJax) {
+            svgElement.setAttribute('fill', '#333333');
+            svgElement.style.color = '#333333';
+
+            svgElement.querySelectorAll('*').forEach(el => {
+                if (el.getAttribute('fill') === 'currentColor' || !el.getAttribute('fill')) {
+                    el.setAttribute('fill', '#333333');
+                }
+                if (el.getAttribute('stroke') === 'currentColor') {
+                    el.setAttribute('stroke', '#333333');
+                }
+            });
+        }
 
         const serializer = new XMLSerializer();
         const svgString = serializer.serializeToString(svgElement);

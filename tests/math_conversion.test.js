@@ -32,7 +32,13 @@ describe('AppleStyleView - Math Formula Processing', () => {
 
     // Mock svgToPngBlob (Critical: bypass Canvas requirement)
     // We attach it to the instance because it's a method of the class
-    view.svgToPngBlob = vi.fn().mockResolvedValue(new Blob(['fake-png'], { type: 'image/png' }));
+    // Corrected mock structure to match implementation contract { blob, width, height, style }
+    view.svgToPngBlob = vi.fn().mockResolvedValue({
+        blob: new Blob(['fake-png'], { type: 'image/png' }),
+        width: 100,
+        height: 20,
+        style: 'vertical-align: -1px;'
+    });
   });
 
   it('should skip processing if no math formulas exist', async () => {
@@ -72,6 +78,10 @@ describe('AppleStyleView - Math Formula Processing', () => {
     expect(outputHtml).toContain('src="http://weixin.qq.com/math.png"');
     expect(outputHtml).not.toContain('<svg'); // SVG should be gone
     expect(outputHtml).toContain('class="math-formula-image"');
+
+    // Verify dimension attributes (from mock return values)
+    expect(outputHtml).toContain('width="100"');
+    expect(outputHtml).toContain('height="20"');
   });
 
   it('should process multiple formulas concurrently', async () => {
@@ -124,7 +134,7 @@ describe('AppleStyleView - Math Formula Processing', () => {
 
     const outputHtml = await view.processMathFormulas(inputHtml, mockApi);
 
-    // The img tag should inherit styles
-    expect(outputHtml).toContain('style="vertical-align: -0.5ex; margin: 10px;"');
+    // The img tag should inherit styles, appended to our default styles
+    expect(outputHtml).toContain('style="display: inline-block; margin: 0 2px;vertical-align: -0.5ex; margin: 10px;"');
   });
 });
