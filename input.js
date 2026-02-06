@@ -337,6 +337,10 @@ class AppleStyleView extends ItemView {
     // 状态缓存：Map<FilePath, { coverBase64, digest }>
     // 用于在不关闭插件面板的情况下，切换文章或关闭弹窗后保留封面和摘要
     this.articleStates = new Map();
+
+    // 公式/SVG 上传缓存：Map<Hash, WechatURL>
+    // 避免重复上传相同的公式，节省微信 API 调用额度 (Quota) 并提升速度
+    this.svgUploadCache = new Map();
   }
 
   getViewType() {
@@ -1177,9 +1181,9 @@ class AppleStyleView extends ItemView {
       // 2.5 处理数学公式 (SVG -> PNG)
       // 放宽检测条件：只要包含 mjx-container 或 <svg，都尝试进行扫描
       if (processedHtml.includes('mjx-container') || processedHtml.includes('<svg')) {
-        notice.setMessage('Hz 正在转换数学公式...');
+        notice.setMessage('🧮 正在转换矢量图/数学公式...');
         processedHtml = await this.processMathFormulas(processedHtml, api, (current, total) => {
-          notice.setMessage(`Hz 正在转换数学公式 (${current}/${total})...`);
+          notice.setMessage(`🧮 正在转换矢量图/数学公式 (${current}/${total})...`);
         });
       }
 
@@ -1333,41 +1337,65 @@ class AppleStyleView extends ItemView {
       // 并发处理
       await pMap(mathNodes, async (svg) => {
         try {
-          // 1. 转为 PNG Blob (同时获取原始尺寸)
-          const { blob, width, height, style } = await this.svgToPngBlob(svg);
+          // 0. 计算 SVG 指纹 (简单的 Hash)
+          const svgStr = new XMLSerializer().serializeToString(svg);
+          // 加上样式属性作为指纹一部分，因为同样的公式可能有不同的 style (color/align)
+          const styleAttr = svg.getAttribute('style') || '';
+          const fillAttr = svg.getAttribute('fill') || '';
+          const fingerprint = this.simpleHash(svgStr + styleAttr + fillAttr);
 
-          // 2. 上传到微信
-          const res = await api.uploadImage(blob);
+          let wechatUrl = '';
+          let logicalWidth, logicalHeight, rawStyle;
+
+          // 1. 检查缓存
+          if (this.svgUploadCache.has(fingerprint)) {
+            // console.log('DEBUG: Hit SVG Cache!', fingerprint);
+            const cachedData = this.svgUploadCache.get(fingerprint);
+            wechatUrl = cachedData.url;
+            logicalWidth = cachedData.width;
+            logicalHeight = cachedData.height;
+            rawStyle = cachedData.style;
+          } else {
+            // 2. 缓存未命中，执行转图和上传
+            const result = await this.svgToPngBlob(svg); // { blob, width, height, style }
+            const res = await api.uploadImage(result.blob);
+
+            wechatUrl = res.url;
+            logicalWidth = result.width;
+            logicalHeight = result.height;
+            rawStyle = result.style;
+
+            // 写入缓存
+            this.svgUploadCache.set(fingerprint, {
+                url: wechatUrl,
+                width: logicalWidth,
+                height: logicalHeight,
+                style: rawStyle
+            });
+          }
 
           // 3. 替换 DOM
           const img = document.createElement('img');
-          img.src = res.url;
+          img.src = wechatUrl;
           img.className = 'math-formula-image';
 
-          // 4. 关键修复：设置显示尺寸为原始逻辑尺寸，防止图片过大
-          // 微信会读取 img 的 width/height 属性来控制显示大小
-          // 我们上传的是 3倍图，但显示要按 1倍显示
-          if (width) img.setAttribute('width', width);
-          if (height) img.setAttribute('height', height);
+          // 4. 关键修复：设置显示尺寸为原始逻辑尺寸
+          if (logicalWidth) img.setAttribute('width', logicalWidth);
+          if (logicalHeight) img.setAttribute('height', logicalHeight);
 
-          // 5. 样式继承 (vertical-align 等)
-          // 优先继承 SVG 本身的 style (通常包含 vertical-align)
-          // 如果 SVG 没有，尝试继承父级 mjx-container 的 style
-          let finalStyle = 'display: inline-block; margin: 0 2px;'; // 默认内联显示
-
+          // 5. 样式继承
+          let finalStyle = 'display: inline-block; margin: 0 2px;';
           const svgStyle = svg.getAttribute('style');
           if (svgStyle) finalStyle += svgStyle;
 
-          // 如果父级有 style 且 SVG 没覆盖，也可以合并（视情况）
           const parent = svg.parentElement;
           if (parent && parent.tagName.toLowerCase().includes('mjx')) {
              const parentStyle = parent.getAttribute('style');
              if (parentStyle) finalStyle += parentStyle;
-             // 替换整个 mjx-container
              img.setAttribute('style', finalStyle);
              parent.replaceWith(img);
           } else {
-             if (style) finalStyle += style; // svgToPngBlob 返回的 style
+             if (rawStyle) finalStyle += rawStyle;
              img.setAttribute('style', finalStyle);
              svg.replaceWith(img);
           }
@@ -2060,6 +2088,17 @@ class AppleStyleView extends ItemView {
     }
 
     console.log('🍎 转换器面板已关闭');
+  }
+
+  /**
+   * 简单的字符串哈希函数 (DJB2算法)
+   */
+  simpleHash(str) {
+    let hash = 5381;
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash * 33) ^ str.charCodeAt(i);
+    }
+    return hash >>> 0; // Ensure unsigned 32-bit integer
   }
 }
 

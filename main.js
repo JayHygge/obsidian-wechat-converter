@@ -273,6 +273,7 @@ var AppleStyleView = class extends ItemView {
     this.sessionCoverBase64 = "";
     this.sessionDigest = "";
     this.articleStates = /* @__PURE__ */ new Map();
+    this.svgUploadCache = /* @__PURE__ */ new Map();
   }
   getViewType() {
     return APPLE_STYLE_VIEW;
@@ -888,9 +889,9 @@ var AppleStyleView = class extends ItemView {
         notice.setMessage(`\u{1F4F8} \u6B63\u5728\u540C\u6B65\u6B63\u6587\u56FE\u7247 (${current}/${total})...`);
       });
       if (processedHtml.includes("mjx-container") || processedHtml.includes("<svg")) {
-        notice.setMessage("Hz \u6B63\u5728\u8F6C\u6362\u6570\u5B66\u516C\u5F0F...");
+        notice.setMessage("\u{1F9EE} \u6B63\u5728\u8F6C\u6362\u77E2\u91CF\u56FE/\u6570\u5B66\u516C\u5F0F...");
         processedHtml = await this.processMathFormulas(processedHtml, api, (current, total) => {
-          notice.setMessage(`Hz \u6B63\u5728\u8F6C\u6362\u6570\u5B66\u516C\u5F0F (${current}/${total})...`);
+          notice.setMessage(`\u{1F9EE} \u6B63\u5728\u8F6C\u6362\u77E2\u91CF\u56FE/\u6570\u5B66\u516C\u5F0F (${current}/${total})...`);
         });
       }
       const cleanedHtml = this.cleanHtmlForDraft(processedHtml);
@@ -998,15 +999,39 @@ var AppleStyleView = class extends ItemView {
       let completed = 0;
       await pMap(mathNodes, async (svg) => {
         try {
-          const { blob, width, height, style } = await this.svgToPngBlob(svg);
-          const res = await api.uploadImage(blob);
+          const svgStr = new XMLSerializer().serializeToString(svg);
+          const styleAttr = svg.getAttribute("style") || "";
+          const fillAttr = svg.getAttribute("fill") || "";
+          const fingerprint = this.simpleHash(svgStr + styleAttr + fillAttr);
+          let wechatUrl = "";
+          let logicalWidth, logicalHeight, rawStyle;
+          if (this.svgUploadCache.has(fingerprint)) {
+            const cachedData = this.svgUploadCache.get(fingerprint);
+            wechatUrl = cachedData.url;
+            logicalWidth = cachedData.width;
+            logicalHeight = cachedData.height;
+            rawStyle = cachedData.style;
+          } else {
+            const result = await this.svgToPngBlob(svg);
+            const res = await api.uploadImage(result.blob);
+            wechatUrl = res.url;
+            logicalWidth = result.width;
+            logicalHeight = result.height;
+            rawStyle = result.style;
+            this.svgUploadCache.set(fingerprint, {
+              url: wechatUrl,
+              width: logicalWidth,
+              height: logicalHeight,
+              style: rawStyle
+            });
+          }
           const img = document.createElement("img");
-          img.src = res.url;
+          img.src = wechatUrl;
           img.className = "math-formula-image";
-          if (width)
-            img.setAttribute("width", width);
-          if (height)
-            img.setAttribute("height", height);
+          if (logicalWidth)
+            img.setAttribute("width", logicalWidth);
+          if (logicalHeight)
+            img.setAttribute("height", logicalHeight);
           let finalStyle = "display: inline-block; margin: 0 2px;";
           const svgStyle = svg.getAttribute("style");
           if (svgStyle)
@@ -1019,8 +1044,8 @@ var AppleStyleView = class extends ItemView {
             img.setAttribute("style", finalStyle);
             parent.replaceWith(img);
           } else {
-            if (style)
-              finalStyle += style;
+            if (rawStyle)
+              finalStyle += rawStyle;
             img.setAttribute("style", finalStyle);
             svg.replaceWith(img);
           }
@@ -1577,6 +1602,16 @@ var AppleStyleView = class extends ItemView {
       this.articleStates.clear();
     }
     console.log("\u{1F34E} \u8F6C\u6362\u5668\u9762\u677F\u5DF2\u5173\u95ED");
+  }
+  /**
+   * 简单的字符串哈希函数 (DJB2算法)
+   */
+  simpleHash(str) {
+    let hash = 5381;
+    for (let i = 0; i < str.length; i++) {
+      hash = hash * 33 ^ str.charCodeAt(i);
+    }
+    return hash >>> 0;
   }
 };
 var AppleStyleSettingTab = class extends PluginSettingTab {
