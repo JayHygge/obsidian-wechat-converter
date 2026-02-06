@@ -736,7 +736,7 @@ var AppleStyleView = class extends ItemView {
    */
   showSyncModal() {
     if (!this.currentHtml) {
-      new Notice("\u274C \u8BF7\u5148\u6253\u5F00\u4E00\u4E2A\u6587\u7AE0\u8FDB\u884C\u8F6C\u6362");
+      new Notice("\u26A0\uFE0F \u8BF7\u5148\u6253\u5F00\u4E00\u4E2A\u6587\u7AE0\u8FDB\u884C\u8F6C\u6362");
       return;
     }
     const { Modal } = require("obsidian");

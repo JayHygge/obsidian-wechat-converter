@@ -163,38 +163,69 @@
   top: 48px; /* 紧贴工具栏下方 */
   left: 0;
   right: 0;
-  background: rgba(255, 255, 255, 0.95);
+  /* 调整透明度：0.95 -> 0.85，让模糊效果更明显 */
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--apple-border);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+
+  /* 视觉区分增强 */
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow:
+    0 10px 40px -10px rgba(0, 0, 0, 0.15), /* 大阴影营造悬浮感 */
+    0 2px 10px rgba(0, 0, 0, 0.05); /* 小阴影增加层次 */
+
+  /* 底部圆角，像一张从顶部滑出的纸 */
+  border-bottom-left-radius: 20px;
+  border-bottom-right-radius: 20px;
+
   z-index: 100;
-  padding: 16px;
-  max-height: calc(100% - 48px);
+  /* 调整内边距：20px -> 12px，让内容更紧凑，两侧留白减少 */
+  padding: 24px 12px 32px 12px;
+  max-height: calc(100% - 64px); /* 留出一点底部空间，避免贴底 */
   overflow-y: auto;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   opacity: 0;
   visibility: hidden;
-  transform: translateY(-10px);
+  transform: translateY(-8px) scale(0.98); /* 微缩放动画，更有质感 */
 }
 
 .theme-dark .apple-settings-overlay {
-  background: rgba(30, 30, 30, 0.95);
+  /* 调整深色模式透明度：0.95 -> 0.8，也增加通透感 */
+  background: rgba(30, 30, 30, 0.8);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  box-shadow:
+    0 10px 40px -10px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.05); /* 内描边高光 */
 }
 
 .apple-settings-overlay.visible {
   opacity: 1;
   visibility: visible;
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
 }
 
 /* 隐藏旧的折叠样式，直接平铺 */
 .apple-settings-area {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px; /* 收紧间距，原32px */
+  max-width: 320px; /* 稍微收窄宽度 */
+  margin: 0 auto; /* 居中显示 */
+}
+
+.apple-setting-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.apple-setting-label {
+  font-size: 12px; /* 恢复精致的小字号 */
+  font-weight: 600;
+  color: var(--apple-secondary); /* 使用次级颜色，不喧宾夺主 */
+  text-transform: uppercase; /* 大写增强标题感 */
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
 }
 
 /* ========================================
