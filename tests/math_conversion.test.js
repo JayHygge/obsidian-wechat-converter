@@ -160,23 +160,75 @@ describe('AppleStyleView - Math Formula Processing', () => {
     expect(outputHtml2).toContain('<img'); // But still return replaced HTML
   });
 
-  it('should not modify original SVG nodes (Side Effect Check)', async () => {
-    // Create a real DOM node to test side effects
-    const div = document.createElement('div');
+  it('should clone the SVG node before processing (prevent side effects)', async () => {
+    // 1. Setup a real DOM node
     const svg = document.createElement('svg');
     svg.setAttribute('role', 'img'); // Mark as MathJax
     svg.setAttribute('fill', 'original-color');
-    div.appendChild(svg);
 
-    // We need to call svgToPngBlob directly to check its side effects on the passed element
-    // But wait, in the test setup (beforeEach), svgToPngBlob is MOCKED!
-    // This means we can't test the real svgToPngBlob logic (cloning) here unless we unmock it.
-    // However, since svgToPngBlob logic is self-contained and hard to test in jsdom (canvas),
-    // we rely on code review for the "cloneNode" fix.
+    // Spy on cloneNode to ensure we are operating on a copy
+    const cloneSpy = vi.spyOn(svg, 'cloneNode');
 
-    // Instead, let's verify that processMathFormulas doesn't mutate inputs unexpectedly
-    // before passing them to the (mocked) converter.
-    // Actually, this test is tricky with the current mock setup.
-    // We will trust the implementation fix: "const clonedSvg = svgElement.cloneNode(true);"
+    // Access the REAL method from prototype
+    const realMethod = AppleStyleView.prototype.svgToPngBlob;
+
+    // 2. Mock necessary Browser APIs to allow the function to complete without hanging
+    // Mock XMLSerializer
+    global.XMLSerializer = class {
+        serializeToString() { return '<svg>...</svg>'; }
+    };
+    // Mock URL
+    global.URL.createObjectURL = vi.fn(() => 'blob:fake-url');
+    global.URL.revokeObjectURL = vi.fn();
+    // Mock Canvas
+    const mockCanvas = {
+        getContext: vi.fn(() => ({
+            scale: vi.fn(),
+            drawImage: vi.fn()
+        })),
+        toBlob: vi.fn((cb) => cb(new Blob(['img'], { type: 'image/png' })))
+    };
+    vi.spyOn(document, 'createElement').mockImplementation((tag) => {
+        if (tag === 'canvas') return mockCanvas;
+        // Call original for other tags (like 'img' inside the method if any, or others)
+        // But wait, document.createElement is native. We only want to intercept 'canvas'.
+        // Restoring original behavior is tricky with simple spy if not carefully done.
+        // Easier: Just return a mock object if tag is canvas.
+        return {
+            style: {},
+            getContext: mockCanvas.getContext,
+            toBlob: mockCanvas.toBlob,
+            setAttribute: () => {},
+            cloneNode: () => ({}),
+            // Add other props if needed
+        };
+    });
+
+    // Critical: Mock Image to trigger onload immediately
+    const originalImage = global.Image;
+    global.Image = class {
+        constructor() {
+            setTimeout(() => {
+                if (this.onload) this.onload();
+            }, 0);
+        }
+        set src(val) { this._src = val; }
+        get src() { return this._src; }
+    };
+
+    try {
+        await realMethod.call(view, svg);
+    } finally {
+        // Restore Image
+        global.Image = originalImage;
+        vi.restoreAllMocks(); // Restore document.createElement etc
+    }
+
+    // 3. Verify cloneNode was called with deep=true
+    expect(cloneSpy).toHaveBeenCalledWith(true);
+
+    // 4. Verify the original node was NOT modified
+    // If cloneNode(true) was NOT used, this would be #333333
+    expect(svg.getAttribute('fill')).toBe('original-color');
   });
 });
