@@ -4,3 +4,4 @@ data.json
 workspace.json
 xgplayer/
 *.zip
+coverage/

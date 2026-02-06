@@ -1110,7 +1110,7 @@ var AppleStyleView = class extends ItemView {
     });
     div.querySelectorAll("li > ul, li > ol").forEach((nestedList) => {
       let style = nestedList.getAttribute("style") || "";
-      style = style.replace(/margin:\s*[^;]+;?/gi, "");
+      style = style.replace(/margin(-[a-z]+)?:\s*[^;]+;?/gi, "");
       style = "margin: 0; " + style;
       nestedList.setAttribute("style", style);
     });
@@ -1752,3 +1752,5 @@ var AppleStylePlugin = class extends Plugin {
   }
 };
 module.exports = AppleStylePlugin;
+module.exports.AppleStyleView = AppleStyleView;
+module.exports.WechatAPI = WechatAPI;
