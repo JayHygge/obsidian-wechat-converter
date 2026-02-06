@@ -128,6 +128,8 @@ window.AppleTheme = class AppleTheme {
     this.fontSize = options.fontSize || 3;
     this.macCodeBlock = options.macCodeBlock !== false;
     this.codeLineNumber = options.codeLineNumber || false;
+    // 侧边距设置 (默认 16px)
+    this.sidePadding = options.sidePadding !== undefined ? options.sidePadding : 16;
   }
 
   /**
@@ -176,7 +178,8 @@ window.AppleTheme = class AppleTheme {
 
     switch (tagName) {
       case 'section':
-        return `font-family: ${font}; font-size: ${sizes.base}px; line-height: ${config.lineHeight}; color: ${config.textColor}; padding: ${s.md}px; background: #ffffff; max-width: 100%; word-wrap: break-word; text-align: justify;`;
+        // 使用配置的 sidePadding
+        return `font-family: ${font}; font-size: ${sizes.base}px; line-height: ${config.lineHeight}; color: ${config.textColor}; padding: 20px ${this.sidePadding}px; background: #ffffff; max-width: 100%; word-wrap: break-word; text-align: justify;`;
 
       case 'h1': return this.getH1Style(config.h1Decoration, color, sizes.h1, font);
       case 'h2': return this.getH2Style(config.h2Decoration, color, sizes.h2, font);
@@ -371,6 +374,7 @@ window.AppleTheme = class AppleTheme {
     if (options.fontSize !== undefined) this.fontSize = options.fontSize;
     if (options.macCodeBlock !== undefined) this.macCodeBlock = options.macCodeBlock;
     if (options.codeLineNumber !== undefined) this.codeLineNumber = options.codeLineNumber;
+    if (options.sidePadding !== undefined) this.sidePadding = options.sidePadding;
   }
 
   /**

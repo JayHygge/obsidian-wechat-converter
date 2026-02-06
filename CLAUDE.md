@@ -57,6 +57,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Separate Bundles**: Heavy features (like MathJax) are bundled separately (`lib/mathjax-plugin.js`) and loaded via `eval()` in `input.js` only when needed.
 - **Global Scope**: When `eval`-ing code, do not assume `window` is available or writable in the same way. Use a safe global resolver (`const _global = typeof window ...`) to export functions from the dynamic bundle.
 
+### 4. UI/UX & Styling
+- **Native Components First**: Always prefer Obsidian's native UI components and browser-default styles (e.g., standard range inputs) over custom CSS hacks.
+- **Vertical Alignment**: Avoid manually calculating margins for vertical centering (e.g., `margin-top: -8px`). Use flexbox or grid layouts where possible, or rely on standard form controls which are already optimized for the platform.
+- **State Persistence**: For multi-document workflows, use in-memory maps (e.g., `Map<Path, State>`) to temporarily cache UI state (like cover images or toggle positions) per file. Clear this cache on plugin unload or view close to prevent memory leaks.
+
 ## Release Checklist
 
 When bumping the version (e.g., v2.3.2 -> v2.3.3), ensure **ALL** of the following files are updated:

@@ -438,6 +438,38 @@ body.theme-dark .apple-toggle-input:checked+.apple-toggle-slider,
   transform: translateX(18px);
 }
 
+/* === 滑块 (Slider) - 回归原生样式 === */
+/* 仅保留容器布局，移除所有自定义的 range input 样式，让浏览器/Obsidian 默认样式接管 */
+.apple-slider-container {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+/* 仅微调颜色以匹配主题，不修改尺寸和布局 */
+input[type="range"].apple-slider {
+  accent-color: var(--apple-accent); /* 现代浏览器支持的强调色属性 */
+  cursor: pointer;
+  flex: 1;
+}
+
+/* 深色模式适配 */
+.theme-dark input[type="range"].apple-slider::-webkit-slider-runnable-track {
+  background: #424244;
+}
+
+/* 交互状态 */
+input[type="range"].apple-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+input[type="range"].apple-slider:active::-webkit-slider-thumb {
+  background: var(--apple-accent);
+}
+
 /* === 操作按钮区 === */
 .apple-actions {
   display: flex;

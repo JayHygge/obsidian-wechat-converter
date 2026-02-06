@@ -32,6 +32,9 @@ var DEFAULT_SETTINGS = {
   // 预览设置
   usePhoneFrame: true,
   // 是否使用手机框预览
+  // 排版设置
+  sidePadding: 16,
+  // 页面两侧留白 (px)
   // 旧字段保留用于迁移检测
   wechatAppId: "",
   wechatAppSecret: ""
@@ -474,7 +477,9 @@ var AppleStyleView = class extends ItemView {
         fontFamily: this.plugin.settings.fontFamily,
         fontSize: this.plugin.settings.fontSize,
         macCodeBlock: this.plugin.settings.macCodeBlock,
-        codeLineNumber: this.plugin.settings.codeLineNumber
+        codeLineNumber: this.plugin.settings.codeLineNumber,
+        sidePadding: this.plugin.settings.sidePadding
+        // 新增参数
       });
       if (!window.AppleStyleConverter)
         throw new Error("AppleStyleConverter failed to load");
@@ -599,6 +604,35 @@ var AppleStyleView = class extends ItemView {
       checkbox.checked = this.plugin.settings.codeLineNumber;
       toggle.createEl("span", { cls: "apple-toggle-slider" });
       checkbox.addEventListener("change", () => this.onCodeLineNumberChange(checkbox.checked));
+    });
+    this.createSection(settingsArea, "\u9875\u9762\u4E24\u4FA7\u7559\u767D", (section) => {
+      const container2 = section.createEl("div", {
+        cls: "apple-slider-container",
+        style: "width: 100%; display: flex; align-items: center; gap: 10px;"
+      });
+      const slider = container2.createEl("input", {
+        type: "range",
+        cls: "apple-slider",
+        attr: { min: 0, max: 40, step: 1 }
+      });
+      slider.value = this.plugin.settings.sidePadding;
+      slider.style.flex = "1";
+      const valueLabel = container2.createEl("span", {
+        text: `${this.plugin.settings.sidePadding}px`,
+        style: "font-size: 12px; color: var(--apple-secondary); min-width: 32px; text-align: right;"
+      });
+      slider.addEventListener("input", async (e) => {
+        const val = parseInt(e.target.value);
+        valueLabel.setText(`${val}px`);
+        this.plugin.settings.sidePadding = val;
+        this.theme.update({ sidePadding: val });
+        if (this.saveTimeout)
+          clearTimeout(this.saveTimeout);
+        this.saveTimeout = setTimeout(async () => {
+          await this.plugin.saveSettings();
+        }, 500);
+        await this.convertCurrent(true);
+      });
     });
     const actions = panel.createEl("div", { cls: "apple-actions" });
     const accounts = this.plugin.settings.wechatAccounts || [];
@@ -1169,11 +1203,11 @@ var AppleStyleView = class extends ItemView {
     const placeholder = this.previewContainer.createEl("div", { cls: "apple-placeholder" });
     placeholder.createEl("div", { cls: "apple-placeholder-icon", text: "\u{1F4DD}" });
     placeholder.createEl("h2", { text: "\u5FAE\u4FE1\u516C\u4F17\u53F7\u6392\u7248\u8F6C\u6362\u5668" });
-    placeholder.createEl("p", { text: "\u5C06 Markdown \u8F6C\u6362\u4E3A\u7CBE\u7F8E\u7684 HTML\uFF0C\u4E00\u952E\u590D\u5236\u5230\u516C\u4F17\u53F7" });
+    placeholder.createEl("p", { text: "\u5C06 Markdown \u8F6C\u6362\u4E3A\u7CBE\u7F8E\u7684 HTML\uFF0C\u4E00\u952E\u540C\u6B65\u5230\u8349\u7A3F\u7BB1" });
     const steps = placeholder.createEl("div", { cls: "apple-steps" });
     steps.createEl("div", { text: "1\uFE0F\u20E3 \u6253\u5F00\u9700\u8981\u8F6C\u6362\u7684 Markdown \u6587\u4EF6" });
     steps.createEl("div", { text: "2\uFE0F\u20E3 \u9884\u89C8\u533A\u4F1A\u81EA\u52A8\u663E\u793A\u8F6C\u6362\u6548\u679C" });
-    steps.createEl("div", { text: "3\uFE0F\u20E3 \u70B9\u51FB\u300C\u590D\u5236\u5230\u516C\u4F17\u53F7\u300D\u7C98\u8D34\u5373\u53EF" });
+    steps.createEl("div", { text: "3\uFE0F\u20E3 \u70B9\u51FB\u300C\u4E00\u952E\u540C\u6B65\u5230\u8349\u7A3F\u7BB1\u300D\u5373\u53EF\u53D1\u9001" });
     const note = placeholder.createEl("p", {
       text: "\u6CE8\u610F\uFF1A\u5982\u5F53\u524D\u5DF2\u6253\u5F00\u6587\u6863\u4F46\u672A\u663E\u793A\uFF0C\u8BF7\u91CD\u65B0\u70B9\u51FB\u4E00\u4E0B\u6587\u6863\u5373\u53EF\u89E6\u53D1",
       cls: "apple-placeholder-note"

@@ -24,6 +24,8 @@ const DEFAULT_SETTINGS = {
   proxyUrl: '',  // Cloudflare Worker 等代理地址
   // 预览设置
   usePhoneFrame: true, // 是否使用手机框预览
+  // 排版设置
+  sidePadding: 16, // 页面两侧留白 (px)
   // 旧字段保留用于迁移检测
   wechatAppId: '',
   wechatAppSecret: '',
@@ -624,6 +626,7 @@ class AppleStyleView extends ItemView {
         fontSize: this.plugin.settings.fontSize,
         macCodeBlock: this.plugin.settings.macCodeBlock,
         codeLineNumber: this.plugin.settings.codeLineNumber,
+        sidePadding: this.plugin.settings.sidePadding, // 新增参数
       });
 
       // 初始化转换器
@@ -785,6 +788,41 @@ class AppleStyleView extends ItemView {
       checkbox.checked = this.plugin.settings.codeLineNumber;
       toggle.createEl('span', { cls: 'apple-toggle-slider' });
       checkbox.addEventListener('change', () => this.onCodeLineNumberChange(checkbox.checked));
+    });
+
+    // === 页面两侧留白 ===
+    this.createSection(settingsArea, '页面两侧留白', (section) => {
+      const container = section.createEl('div', {
+        cls: 'apple-slider-container',
+        style: 'width: 100%; display: flex; align-items: center; gap: 10px;'
+      });
+
+      const slider = container.createEl('input', {
+        type: 'range',
+        cls: 'apple-slider',
+        attr: { min: 0, max: 40, step: 1 }
+      });
+      slider.value = this.plugin.settings.sidePadding;
+      slider.style.flex = '1';
+
+      const valueLabel = container.createEl('span', {
+        text: `${this.plugin.settings.sidePadding}px`,
+        style: 'font-size: 12px; color: var(--apple-secondary); min-width: 32px; text-align: right;'
+      });
+
+      slider.addEventListener('input', async (e) => {
+        const val = parseInt(e.target.value);
+        valueLabel.setText(`${val}px`);
+        // 实时更新主题，触发预览
+        this.plugin.settings.sidePadding = val;
+        this.theme.update({ sidePadding: val });
+        // 保存设置需要防抖，避免频繁写入
+        if (this.saveTimeout) clearTimeout(this.saveTimeout);
+        this.saveTimeout = setTimeout(async () => {
+          await this.plugin.saveSettings();
+        }, 500);
+        await this.convertCurrent(true);
+      });
     });
 
     // === 操作按钮 ===
@@ -1516,11 +1554,11 @@ class AppleStyleView extends ItemView {
     const placeholder = this.previewContainer.createEl('div', { cls: 'apple-placeholder' });
     placeholder.createEl('div', { cls: 'apple-placeholder-icon', text: '📝' });
     placeholder.createEl('h2', { text: '微信公众号排版转换器' });
-    placeholder.createEl('p', { text: '将 Markdown 转换为精美的 HTML，一键复制到公众号' });
+    placeholder.createEl('p', { text: '将 Markdown 转换为精美的 HTML，一键同步到草稿箱' });
     const steps = placeholder.createEl('div', { cls: 'apple-steps' });
     steps.createEl('div', { text: '1️⃣ 打开需要转换的 Markdown 文件' });
     steps.createEl('div', { text: '2️⃣ 预览区会自动显示转换效果' });
-    steps.createEl('div', { text: '3️⃣ 点击「复制到公众号」粘贴即可' });
+    steps.createEl('div', { text: '3️⃣ 点击「一键同步到草稿箱」即可发送' });
 
     // 添加提示
     const note = placeholder.createEl('p', {
@@ -1923,8 +1961,6 @@ class AppleStyleSettingTab extends PluginSettingTab {
           this.plugin.settings.showImageCaption = value;
           await this.plugin.saveSettings();
         }));
-
-
 
     // 微信公众号账号管理
     new Setting(containerEl)
