@@ -1170,11 +1170,20 @@ class AppleStyleView extends ItemView {
 
       // 2. 处理文章图片
       notice.setMessage('📸 正在同步正文图片...');
-      const processedHtml = await this.processAllImages(this.currentHtml, api, (current, total) => {
+      let processedHtml = await this.processAllImages(this.currentHtml, api, (current, total) => {
           notice.setMessage(`📸 正在同步正文图片 (${current}/${total})...`);
       });
 
-      // 2.5 清理 HTML 以适配微信编辑器
+      // 2.5 处理数学公式 (SVG -> PNG)
+      // 检查是否存在 MathJax 公式
+      if (processedHtml.includes('mjx-container')) {
+        notice.setMessage('Hz 正在转换数学公式...');
+        processedHtml = await this.processMathFormulas(processedHtml, api, (current, total) => {
+          notice.setMessage(`Hz 正在转换数学公式 (${current}/${total})...`);
+        });
+      }
+
+      // 2.6 清理 HTML 以适配微信编辑器
       const cleanedHtml = this.cleanHtmlForDraft(processedHtml);
 
       // 3. 获取文章标题
@@ -1271,11 +1280,15 @@ class AppleStyleView extends ItemView {
     const tasks = Array.from(uniqueUrls);
 
     await pMap(tasks, async (src) => {
-        // 如果已经处理过（比如重复的URL在并发中被其他任务处理了？不，pMap的任务是唯一的src）
-        // 这里不需要 try-catch，因为我们希望出错时直接抛出，中断整个流程
-        const blob = await this.srcToBlob(src);
-        const res = await api.uploadImage(blob);
-        urlMap.set(src, res.url);
+        try {
+          const blob = await this.srcToBlob(src);
+          const res = await api.uploadImage(blob);
+          urlMap.set(src, res.url);
+        } catch (error) {
+          console.error('图片处理失败，已跳过:', src, error);
+          // 仅在控制台记录，不中断流程，也不频繁弹窗打扰用户
+          // 用户会在预览中看到该图片未被替换
+        }
 
         completed++;
         if (progressCallback) {
@@ -1291,6 +1304,127 @@ class AppleStyleView extends ItemView {
     }
 
     return div.innerHTML;
+  }
+
+  /**
+   * 处理 HTML 中的数学公式 (MathJax SVG -> Wechat Image)
+   * 解决微信接口内容长度限制问题
+   */
+  async processMathFormulas(html, api, progressCallback) {
+    // 创建临时容器并挂载到 DOM (为了正确计算 SVG 尺寸)
+    const container = document.createElement('div');
+    container.style.position = 'absolute';
+    container.style.left = '-9999px';
+    container.style.top = '0';
+    container.style.width = '800px'; // 模拟常见的文章宽度
+    container.innerHTML = html;
+    document.body.appendChild(container);
+
+    try {
+      // 查找所有 MathJax 容器
+      const mathNodes = Array.from(container.querySelectorAll('mjx-container svg'));
+      if (mathNodes.length === 0) return html;
+
+      const total = mathNodes.length;
+      let completed = 0;
+
+      // 并发处理
+      await pMap(mathNodes, async (svg) => {
+        try {
+          // 1. 转为 PNG Blob
+          const blob = await this.svgToPngBlob(svg);
+
+          // 2. 上传到微信
+          const res = await api.uploadImage(blob);
+
+          // 3. 替换 DOM
+          const img = document.createElement('img');
+          img.src = res.url;
+          img.className = 'math-formula-image';
+
+          // 尝试保留原有的对齐样式
+          const parent = svg.parentElement; // mjx-container
+          if (parent) {
+            const style = parent.getAttribute('style');
+            if (style) img.setAttribute('style', style);
+            // 替换整个 mjx-container，减少嵌套
+            parent.replaceWith(img);
+          } else {
+            svg.replaceWith(img);
+          }
+
+          completed++;
+          if (progressCallback) progressCallback(completed, total);
+        } catch (error) {
+          console.error('公式转换失败，保留原SVG:', error);
+        }
+      }, 3); // 限制并发数
+
+      return container.innerHTML;
+    } finally {
+      // 清理 DOM
+      document.body.removeChild(container);
+    }
+  }
+
+  /**
+   * 将 SVG 元素转换为高分辨率 PNG Blob
+   */
+  async svgToPngBlob(svgElement, scale = 3) {
+    return new Promise((resolve, reject) => {
+      try {
+        // 1. 获取 SVG 尺寸
+        const rect = svgElement.getBoundingClientRect();
+        let width = rect.width;
+        let height = rect.height;
+
+        // 如果尺寸获取失败(0)，尝试读取属性
+        if (width === 0 || height === 0) {
+           width = parseFloat(svgElement.getAttribute('width')) || 100;
+           height = parseFloat(svgElement.getAttribute('height')) || 20;
+           // MathJax width/height 可能是 ex 单位，这里简化处理
+           // 实际因为挂载到了 DOM，getBoundingClientRect 应该能拿到值
+        }
+
+        // 2. 序列化 SVG
+        const serializer = new XMLSerializer();
+        const svgString = serializer.serializeToString(svgElement);
+        const svgBlob = new Blob([svgString], {type: 'image/svg+xml;charset=utf-8'});
+        const url = URL.createObjectURL(svgBlob);
+
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            // 使用高倍率 (Retina 适配)
+            canvas.width = width * scale;
+            canvas.height = height * scale;
+
+            const ctx = canvas.getContext('2d');
+            ctx.scale(scale, scale);
+            ctx.drawImage(img, 0, 0, width, height);
+
+            URL.revokeObjectURL(url);
+
+            canvas.toBlob((blob) => {
+              if (blob) resolve(blob);
+              else reject(new Error('Canvas conversion failed'));
+            }, 'image/png');
+          } catch (e) {
+            reject(e);
+          }
+        };
+
+        img.onerror = (e) => {
+          URL.revokeObjectURL(url);
+          reject(new Error('SVG Image load failed'));
+        };
+
+        img.src = url;
+      } catch (e) {
+        reject(e);
+      }
+    });
   }
 
   /**
