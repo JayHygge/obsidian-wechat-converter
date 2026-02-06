@@ -1175,8 +1175,8 @@ class AppleStyleView extends ItemView {
       });
 
       // 2.5 处理数学公式 (SVG -> PNG)
-      // 检查是否存在 MathJax 公式
-      if (processedHtml.includes('mjx-container')) {
+      // 放宽检测条件：只要包含 mjx-container 或 <svg，都尝试进行扫描
+      if (processedHtml.includes('mjx-container') || processedHtml.includes('<svg')) {
         notice.setMessage('Hz 正在转换数学公式...');
         processedHtml = await this.processMathFormulas(processedHtml, api, (current, total) => {
           notice.setMessage(`Hz 正在转换数学公式 (${current}/${total})...`);
