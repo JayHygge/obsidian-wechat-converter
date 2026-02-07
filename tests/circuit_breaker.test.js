@@ -97,12 +97,16 @@ describe('Circuit Breaker (Rate Limit & Quota Handling)', () => {
     });
 
     it('should abort processing immediately upon encountering a fatal error', async () => {
-        // Setup: 3 items to process to verify concurrency abortion
+        // Setup: 5 items with concurrency 2
+        // If fail-fast works, it should stop after the first batch (or slightly more due to race),
+        // but definitely NOT process all 5.
         const inputHtml = `
             <div>
                 <svg id="1"></svg>
                 <svg id="2"></svg>
                 <svg id="3"></svg>
+                <svg id="4"></svg>
+                <svg id="5"></svg>
             </div>
         `;
 
@@ -112,7 +116,7 @@ describe('Circuit Breaker (Rate Limit & Quota Handling)', () => {
 
         mockApi.uploadImage
             .mockRejectedValueOnce(fatalError) // 1st fails fatally
-            .mockResolvedValue({ url: 'http://ok' }); // Others would succeed if called
+            .mockResolvedValue({ url: 'http://ok' }); // Others would succeed
 
         // Execute
         try {
@@ -121,12 +125,14 @@ describe('Circuit Breaker (Rate Limit & Quota Handling)', () => {
             expect(e.message).toBe('Fatal 45009');
 
             // Verification:
-            // In a perfect circuit breaker, subsequent calls should be skipped.
-            // Due to pMap concurrency (Promise.all), pending promises might still run,
-            // but the loop should stop adding new ones.
-            // With 3 items and concurrency 3, all might start.
-            // But if we had more items (e.g. 10), we'd see clear stopping.
-            // For this test, catching the fatal error is the primary success criteria.
+            // Concurrency is 3 (default in view, but we can't easily change private var).
+            // Wait, pMap concurrency default is 3.
+            // Item 1 starts -> Fails immediately.
+            // Item 2, 3 start (concurrency 3).
+            // Loop checks isFailed -> breaks.
+            // So we expect 3 calls max (1 failed + 2 started concurrent).
+            // Definitely not 5.
+            expect(mockApi.uploadImage.mock.calls.length).toBeLessThan(5);
             return;
         }
         // Fail if no error thrown

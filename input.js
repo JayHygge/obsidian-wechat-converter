@@ -47,12 +47,14 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 async function pMap(array, mapper, concurrency = 3) {
   const results = [];
   const executing = [];
+  let isFailed = false;
   for (const item of array) {
+    if (isFailed) break;
     const p = Promise.resolve().then(() => mapper(item));
     results.push(p);
     // Fix: Ensure cleanup happens regardless of success or failure
-    // .catch() handles the error so .then() always runs to remove from executing queue
-    const e = p.catch(() => {}).then(() => executing.splice(executing.indexOf(e), 1));
+    // If error occurs, mark as failed to stop scheduling new tasks
+    const e = p.catch(() => { isFailed = true; }).then(() => executing.splice(executing.indexOf(e), 1));
     executing.push(e);
     if (executing.length >= concurrency) {
       await Promise.race(executing);
