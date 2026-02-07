@@ -63,13 +63,10 @@ describe('Circuit Breaker (Rate Limit & Quota Handling)', () => {
 
   it('should NOT mark regular errors (e.g. 40001 token) as fatal', async () => {
     // Mock API response with non-fatal error
-    // Note: WechatAPI retries internally, so we need to mock it returning error consistently
     obsidian.requestUrl.mockResolvedValue({
       json: { errcode: 40001, errmsg: 'invalid credential' }
     });
 
-    // We need to spy on getAccessToken to avoid infinite loop in actionWithTokenRetry
-    // But here we test requestWithRetry directly for simpler assertion
     try {
         await api.requestWithRetry(async () => {
             const res = await api.sendRequest('http://test');
@@ -77,7 +74,10 @@ describe('Circuit Breaker (Rate Limit & Quota Handling)', () => {
         }, 1); // 1 retry
     } catch (error) {
         expect(error.isFatal).toBeUndefined();
+        return; // Success if error caught but not fatal
     }
+    // Fail if no error thrown
+    throw new Error('Should have thrown a non-fatal error');
   });
 
   // === 2. View Level: Circuit Breaking Logic ===
@@ -97,12 +97,10 @@ describe('Circuit Breaker (Rate Limit & Quota Handling)', () => {
     });
 
     it('should abort processing immediately upon encountering a fatal error', async () => {
-        // Setup: 3 items to process
+        // Setup: 1 item is sufficient to test the throw logic
         const inputHtml = `
             <div>
                 <svg id="1"></svg>
-                <svg id="2"></svg>
-                <svg id="3"></svg>
             </div>
         `;
 
@@ -110,26 +108,16 @@ describe('Circuit Breaker (Rate Limit & Quota Handling)', () => {
         const fatalError = new Error('Fatal 45009');
         fatalError.isFatal = true;
 
-        mockApi.uploadImage
-            .mockRejectedValueOnce(fatalError) // 1st fails fatally
-            .mockResolvedValue({ url: 'http://ok' }); // Others would succeed if called
+        mockApi.uploadImage.mockRejectedValueOnce(fatalError);
 
-        // Execute
         try {
             await view.processMathFormulas(inputHtml, mockApi);
         } catch (e) {
             expect(e.message).toBe('Fatal 45009');
+            return; // Success
         }
-
-        // Assertion: Circuit Breaker triggered?
-        // Should catch the fatal error and STOP.
-        // We verify that uploadImage was NOT called for subsequent items.
-        // Because concurrency is 3, pMap might have started them, but if we throw immediately,
-        // the loop logic we added (if error.isFatal throw error) ensures we exit.
-
-        // Actually, with pMap concurrency, if the first promise rejects, pMap rejects.
-        // But our custom loop handles errors.
-        // The fact that we catch the error outside means it bubbled up properly.
+        // Fail if no error thrown
+        throw new Error('Should have thrown fatal error');
     });
 
     it('should continue processing upon encountering a NON-fatal error (e.g. 404)', async () => {

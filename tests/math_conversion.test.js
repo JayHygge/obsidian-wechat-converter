@@ -9,13 +9,6 @@ vi.mock('obsidian', () => ({
   requestUrl: vi.fn(),
 }));
 
-// Mock pMap to run sequentially in tests for easier assertion
-// Note: In input.js, pMap is defined globally or locally.
-// Since we are importing AppleStyleView which uses pMap internally (defined in module scope),
-// we might need to mock global pMap or just let it run if it's exported.
-// Looking at input.js, pMap is defined in module scope but not exported.
-// However, since it's just a helper, it should work fine in jsdom environment.
-
 const { AppleStyleView } = require('../input.js');
 
 describe('AppleStyleView - Math Formula Processing', () => {
@@ -72,8 +65,6 @@ describe('AppleStyleView - Math Formula Processing', () => {
     expect(mockApi.uploadImage).toHaveBeenCalledTimes(1);
 
     // 3. Check if DOM was replaced
-    // The <mjx-container> should be replaced or contain the <img>
-    // Our implementation replaces the svg's parent (mjx-container) if it exists
     expect(outputHtml).toContain('<img');
     expect(outputHtml).toContain('src="http://weixin.qq.com/math.png"');
     expect(outputHtml).not.toContain('<svg'); // SVG should be gone
@@ -144,14 +135,10 @@ describe('AppleStyleView - Math Formula Processing', () => {
     // 1. First call: Should upload
     const inputHtml1 = '<div><svg id="eq1" width="100" height="20" style="color:red"></svg></div>';
 
-    // We need to ensure simpleHash works.
-    // Since view.simpleHash is a method, we can spy on it or just rely on uploadImage counts.
-
     await view.processMathFormulas(inputHtml1, mockApi);
     expect(mockApi.uploadImage).toHaveBeenCalledTimes(1);
 
     // 2. Second call: Should use cache (0 uploads)
-    // Note: processMathFormulas recreates DOM, so we pass same string
     mockApi.uploadImage.mockClear(); // Reset count
 
     const outputHtml2 = await view.processMathFormulas(inputHtml1, mockApi);
@@ -172,14 +159,16 @@ describe('AppleStyleView - Math Formula Processing', () => {
     // Access the REAL method from prototype
     const realMethod = AppleStyleView.prototype.svgToPngBlob;
 
-    // 2. Mock necessary Browser APIs to allow the function to complete without hanging
-    // Mock XMLSerializer
-    global.XMLSerializer = class {
+    // 2. Mock necessary Browser APIs using vi.stubGlobal for cleaner restoration
+    vi.stubGlobal('XMLSerializer', class {
         serializeToString() { return '<svg>...</svg>'; }
-    };
-    // Mock URL
-    global.URL.createObjectURL = vi.fn(() => 'blob:fake-url');
-    global.URL.revokeObjectURL = vi.fn();
+    });
+
+    // Use spies for existing globals if possible, or stub if they are readonly/missing in jsdom
+    // jsdom has URL, so we spy on createObjectURL
+    const createObjectUrlSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake-url');
+    const revokeObjectUrlSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+
     // Mock Canvas
     const mockCanvas = {
         getContext: vi.fn(() => ({
@@ -188,25 +177,24 @@ describe('AppleStyleView - Math Formula Processing', () => {
         })),
         toBlob: vi.fn((cb) => cb(new Blob(['img'], { type: 'image/png' })))
     };
-    vi.spyOn(document, 'createElement').mockImplementation((tag) => {
+
+    // Stub createElement to intercept canvas creation
+    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tag) => {
         if (tag === 'canvas') return mockCanvas;
-        // Call original for other tags (like 'img' inside the method if any, or others)
-        // But wait, document.createElement is native. We only want to intercept 'canvas'.
-        // Restoring original behavior is tricky with simple spy if not carefully done.
-        // Easier: Just return a mock object if tag is canvas.
+        // For other tags, we should ideally call original, but jsdom's createElement is complex.
+        // We know svgToPngBlob only creates 'canvas' explicitly.
         return {
             style: {},
             getContext: mockCanvas.getContext,
             toBlob: mockCanvas.toBlob,
             setAttribute: () => {},
             cloneNode: () => ({}),
-            // Add other props if needed
         };
     });
 
     // Critical: Mock Image to trigger onload immediately
-    const originalImage = global.Image;
-    global.Image = class {
+    const OriginalImage = global.Image;
+    vi.stubGlobal('Image', class {
         constructor() {
             setTimeout(() => {
                 if (this.onload) this.onload();
@@ -214,21 +202,20 @@ describe('AppleStyleView - Math Formula Processing', () => {
         }
         set src(val) { this._src = val; }
         get src() { return this._src; }
-    };
+    });
 
     try {
         await realMethod.call(view, svg);
     } finally {
-        // Restore Image
-        global.Image = originalImage;
-        vi.restoreAllMocks(); // Restore document.createElement etc
+        // Restore everything
+        vi.unstubAllGlobals(); // Restores XMLSerializer, Image
+        vi.restoreAllMocks();  // Restores URL, document.createElement
     }
 
     // 3. Verify cloneNode was called with deep=true
     expect(cloneSpy).toHaveBeenCalledWith(true);
 
     // 4. Verify the original node was NOT modified
-    // If cloneNode(true) was NOT used, this would be #333333
     expect(svg.getAttribute('fill')).toBe('original-color');
   });
 });
