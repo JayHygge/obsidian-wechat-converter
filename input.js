@@ -95,6 +95,21 @@ class WechatAPI {
            throw error;
         }
 
+        // 熔断机制：识别致命错误 (配额超限/素材满)，立即停止重试并向上抛出
+        // 45009: 接口调用频次达到上限 (日限额)
+        if (error.message && (error.message.includes('45009') || error.message.includes('reach max api daily quota limit'))) {
+            const fatalError = new Error('微信接口今日额度已用完 (45009)，请明天再试或切换账号。');
+            fatalError.isFatal = true;
+            throw fatalError;
+        }
+
+        // 45001: 素材数量达到上限 (总限额)
+        if (error.message && (error.message.includes('45001') || error.message.includes('media size out of limit'))) {
+            const fatalError = new Error('微信后台素材库已满 (45001)。请登录微信公众平台 -> 素材管理，手动删除旧图片以释放空间。');
+            fatalError.isFatal = true;
+            throw fatalError;
+        }
+
         // 识别 Token 过期错误，直接失败，交由上层 actionWithTokenRetry 处理刷新
         const isTokenError = error.message && (
             error.message.includes('40001') ||
@@ -1289,6 +1304,9 @@ class AppleStyleView extends ItemView {
           const res = await api.uploadImage(blob);
           urlMap.set(src, res.url);
         } catch (error) {
+          // 熔断机制：如果是配额超限等致命错误，停止后续所有上传
+          if (error.isFatal) throw error;
+
           console.error('图片处理失败，已跳过:', src, error);
           // 仅在控制台记录，不中断流程，也不频繁弹窗打扰用户
           // 用户会在预览中看到该图片未被替换
@@ -1403,6 +1421,9 @@ class AppleStyleView extends ItemView {
           completed++;
           if (progressCallback) progressCallback(completed, total);
         } catch (error) {
+          // 熔断机制：如果是配额超限等致命错误，停止后续所有上传
+          if (error.isFatal) throw error;
+
           console.error('公式转换失败，保留原SVG:', error);
         }
       }, 3); // 限制并发数
