@@ -125,14 +125,13 @@ describe('Circuit Breaker (Rate Limit & Quota Handling)', () => {
             expect(e.message).toBe('Fatal 45009');
 
             // Verification:
-            // Concurrency is 3 (default in view, but we can't easily change private var).
-            // Wait, pMap concurrency default is 3.
-            // Item 1 starts -> Fails immediately.
-            // Item 2, 3 start (concurrency 3).
+            // Concurrency is 3 (default).
+            // Items 1, 2, 3 start immediately (synchronously pushed to executing queue).
+            // Item 1 fails -> sets isFailed = true.
             // Loop checks isFailed -> breaks.
-            // So we expect 3 calls max (1 failed + 2 started concurrent).
-            // Definitely not 5.
-            expect(mockApi.uploadImage.mock.calls.length).toBeLessThan(5);
+            // Items 4, 5 never start.
+            // So we expect exactly 3 calls.
+            expect(mockApi.uploadImage).toHaveBeenCalledTimes(3);
             return;
         }
         // Fail if no error thrown
