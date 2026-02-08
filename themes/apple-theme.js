@@ -201,7 +201,14 @@ window.AppleTheme = class AppleTheme {
       case 'blockquote':
         if (config.blockquoteStyle === 'center') {
           // Centered Blockquote: Now using theme color tint (1F) instead of purely grey, for continuity
-          return `font-family: ${AppleTheme.FONTS.serif}; font-size: ${sizes.base}px; line-height: 1.8; color: #555; background: ${config.blockquoteBg || color + '1F'}; margin: 30px 40px; padding: 20px; text-align: center; border: none; position: relative; border-radius: 4px;`;
+          return `font-family: ${AppleTheme.FONTS.serif}; font-size: ${sizes.base}px; line-height: 1.8; color: #555; background: ${config.blockquoteBg || color + '1F'}; margin: 30px 60px; padding: 20px; text-align: center; border: none; position: relative; border-radius: 4px;`;
+        }
+
+        // 经典主题（wechat）：使用更细的边框和更浅的颜色，与 H3 区分
+        // H3: 4px 主题色 100% 左边框，顶格
+        // 引用块: 3px 主题色 60% 左边框，缩进 4px
+        if (this.themeName === 'wechat') {
+          return `font-size: ${sizes.base}px; line-height: ${config.lineHeight}; color: #595959; background: ${config.blockquoteBg || color + '1F'}; margin: ${s.md}px 0 ${s.md}px 4px; padding: ${s.md}px; border-left: 3px solid ${color}99; border-radius: 3px;`;
         }
 
         // Standard Blockquote: Restoring Italic and adjusting padding/background to match the screenshot

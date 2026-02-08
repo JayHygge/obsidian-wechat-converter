@@ -4,6 +4,45 @@
  * 针对微信公众号优化：使用 section 结构，增强兼容性
  */
 
+// Callout 图标配置（颜色跟随主题色）
+const CALLOUT_ICONS = {
+  // 信息类
+  note: { icon: 'ℹ️', label: '备注' },
+  info: { icon: 'ℹ️', label: '信息' },
+  todo: { icon: '☑️', label: '待办' },
+  // 摘要类
+  abstract: { icon: '📄', label: '摘要' },
+  summary: { icon: '📄', label: '摘要' },
+  tldr: { icon: '📄', label: 'TL;DR' },
+  // 提示类
+  tip: { icon: '💡', label: '提示' },
+  hint: { icon: '💡', label: '提示' },
+  important: { icon: '💡', label: '重要' },
+  // 成功类
+  success: { icon: '✅', label: '成功' },
+  check: { icon: '✅', label: '完成' },
+  done: { icon: '✅', label: '完成' },
+  // 问题类
+  question: { icon: '❓', label: '问题' },
+  help: { icon: '❓', label: '帮助' },
+  faq: { icon: '❓', label: 'FAQ' },
+  // 警告类
+  warning: { icon: '⚠️', label: '警告' },
+  caution: { icon: '⚠️', label: '注意' },
+  attention: { icon: '⚠️', label: '注意' },
+  // 失败/危险类
+  failure: { icon: '❌', label: '失败' },
+  fail: { icon: '❌', label: '失败' },
+  missing: { icon: '❌', label: '缺失' },
+  danger: { icon: '🚨', label: '危险' },
+  error: { icon: '❌', label: '错误' },
+  bug: { icon: '🐛', label: 'Bug' },
+  // 引用类
+  quote: { icon: '💬', label: '引用' },
+  cite: { icon: '📝', label: '引用' },
+  // 示例类
+  example: { icon: '📋', label: '示例' },
+};
 
 window.AppleStyleConverter = class AppleStyleConverter {
   constructor(theme, avatarUrl = '', showImageCaption = true, app = null, sourcePath = '') {
@@ -68,7 +107,27 @@ window.AppleStyleConverter = class AppleStyleConverter {
   setupRenderRules() {
     this.md.renderer.rules.paragraph_open = () => `<p style="${this.getInlineStyle('p')}">`;
     this.md.renderer.rules.heading_open = (tokens, idx) => `<${tokens[idx].tag} style="${this.getInlineStyle(tokens[idx].tag)}">`;
-    this.md.renderer.rules.blockquote_open = () => `<blockquote style="${this.getInlineStyle('blockquote')}">`;
+    // Callout & Blockquote 智能检测渲染
+    this.md.renderer.rules.blockquote_open = (tokens, idx, options, env, self) => {
+      // 查找 blockquote 内的第一个文本内容，检测是否为 callout 语法
+      const calloutInfo = this.detectCallout(tokens, idx);
+      if (calloutInfo) {
+        // 标记为 callout，后续 blockquote_close 会使用
+        env._calloutInfo = calloutInfo;
+        return this.renderCalloutOpen(calloutInfo);
+      }
+      // 普通 blockquote
+      env._calloutInfo = null;
+      return `<blockquote style="${this.getInlineStyle('blockquote')}">`;
+    };
+
+    this.md.renderer.rules.blockquote_close = (tokens, idx, options, env, self) => {
+      if (env._calloutInfo) {
+        env._calloutInfo = null;
+        return `</section></section>`; // 关闭内容区和外层容器
+      }
+      return `</blockquote>`;
+    };
     this.md.renderer.rules.bullet_list_open = () => `<ul style="${this.getInlineStyle('ul')}">`;
     this.md.renderer.rules.ordered_list_open = () => `<ol style="${this.getInlineStyle('ol')}">`;
     this.md.renderer.rules.list_item_open = () => `<li style="${this.getInlineStyle('li')}">`;
@@ -136,6 +195,147 @@ window.AppleStyleConverter = class AppleStyleConverter {
     this.md.renderer.rules.thead_open = () => `<thead style="${this.getInlineStyle('thead')}">`;
     this.md.renderer.rules.th_open = () => `<th style="${this.getInlineStyle('th')}">`;
     this.md.renderer.rules.td_open = () => `<td style="${this.getInlineStyle('td')}">`;
+  }
+
+  /**
+   * 检测 blockquote 是否为 Callout 语法
+   * @param {Array} tokens - markdown-it tokens
+   * @param {number} idx - blockquote_open 的索引
+   * @returns {Object|null} - callout 信息 { type, title, icon, label } 或 null
+   */
+  detectCallout(tokens, idx) {
+    // 查找 blockquote 内的第一个 inline token
+    for (let i = idx + 1; i < tokens.length; i++) {
+      if (tokens[i].type === 'blockquote_close') break;
+      if (tokens[i].type === 'inline' && tokens[i].content) {
+        // 只取第一行内容进行匹配，防止多行内容被错误地当作标题
+        const firstLine = tokens[i].content.split('\n')[0];
+        const match = firstLine.match(/^\[!(\w+)\](?:\s+(.*))?/);
+        if (match) {
+          const type = match[1].toLowerCase();
+          const customTitle = match[2] ? match[2].trim() : null;
+          const config = CALLOUT_ICONS[type] || { icon: '📌', label: type };
+          // 保留原始 type 作为默认标题（如 "warning"），不做翻译
+          // 首字母大写以提升可读性
+          const defaultTitle = type.charAt(0).toUpperCase() + type.slice(1);
+          return {
+            type,
+            title: customTitle || defaultTitle,
+            icon: config.icon,
+            label: config.label,
+          };
+        }
+        break; // 只检查第一个 inline
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 渲染 Callout 开始标签
+   * @param {Object} calloutInfo - { type, title, icon }
+   * @returns {string} - HTML 字符串
+   */
+  renderCalloutOpen(calloutInfo) {
+    const color = this.theme.getThemeColorValue();
+    const sizes = this.theme.getSizes();
+    const font = this.theme.getFontFamily();
+    const themeName = this.theme.themeName;
+
+    // 优雅主题：居中样式（与其引用块风格一致）
+    if (themeName === 'serif') {
+      return this.renderCalloutOpenCentered(calloutInfo, color, sizes, font);
+    }
+
+    // 简约/经典主题：左边框样式
+    const isWechat = themeName === 'wechat';
+    const marginLeft = isWechat ? '4px' : '0';
+    const borderWidth = isWechat ? '3px' : '4px';
+    const borderColor = isWechat ? `${color}99` : color;
+
+    // 外层容器：左边框风格
+    const containerStyle = `
+      margin: 16px 0 16px ${marginLeft};
+      border-left: ${borderWidth} solid ${borderColor};
+      background: ${color}1A;
+      border-radius: 3px;
+      overflow: hidden;
+    `.replace(/\s+/g, ' ').trim();
+
+    // 标题栏：深色背景 + 图标 + 标题
+    const headerStyle = `
+      display: flex;
+      align-items: center;
+      padding: 8px 12px;
+      background: ${color}26;
+      font-weight: bold;
+      font-size: ${sizes.base}px;
+      font-family: ${font};
+      color: #333;
+    `.replace(/\s+/g, ' ').trim();
+
+    const iconStyle = `margin-right: 8px; font-size: ${sizes.base + 2}px;`;
+    const titleStyle = `flex: 1;`;
+
+    // 内容区：正文内容
+    const contentStyle = `
+      padding: 12px 16px;
+      font-size: ${sizes.base}px;
+      line-height: 1.8;
+      color: #595959;
+    `.replace(/\s+/g, ' ').trim();
+
+    return `<section style="${containerStyle}">
+      <section style="${headerStyle}">
+        <span style="${iconStyle}">${calloutInfo.icon}</span>
+        <span style="${titleStyle}">${calloutInfo.title}</span>
+      </section>
+      <section style="${contentStyle}">`;
+  }
+
+  /**
+   * 渲染居中样式的 Callout（用于优雅主题）
+   * @param {Object} calloutInfo - { type, title, icon }
+   * @param {string} color - 主题色
+   * @param {Object} sizes - 字体尺寸配置
+   * @param {string} font - 字体族
+   * @returns {string} - HTML 字符串
+   */
+  renderCalloutOpenCentered(calloutInfo, color, sizes, font) {
+    // 居中样式：无左边框，水平居中，圆角边框
+    const containerStyle = `
+      margin: 30px 60px;
+      background: ${color}1F;
+      border-radius: 4px;
+      overflow: hidden;
+    `.replace(/\s+/g, ' ').trim();
+
+    // 标题栏：靠左对齐，与其他主题保持一致
+    const headerStyle = `
+      display: flex;
+      align-items: center;
+      padding: 12px 20px;
+      background: ${color}26;
+      font-weight: bold;
+      font-size: ${sizes.base}px;
+      font-family: ${font};
+      color: #333;
+    `.replace(/\s+/g, ' ').trim();
+
+    const contentStyle = `
+      padding: 16px 20px;
+      font-size: ${sizes.base}px;
+      line-height: 1.8;
+      color: #555;
+      text-align: center;
+    `.replace(/\s+/g, ' ').trim();
+
+    return `<section style="${containerStyle}">
+      <section style="${headerStyle}">
+        <span style="margin-right: 8px;">${calloutInfo.icon}</span>
+        <span>${calloutInfo.title}</span>
+      </section>
+      <section style="${contentStyle}">`;
   }
 
   highlightCode(code, lang) {
@@ -315,6 +515,7 @@ ${macHeader}
     html = this.fixListParagraphs(html);
     html = this.unwrapFigures(html); // Fix: Remove <p> wrappers from <figure> to prevent empty lines
     html = this.removeBlockquoteParagraphMargins(html); // Fix: Remove margins from <p> inside <blockquote> for vertical centering
+    html = this.cleanCalloutMarkers(html); // Fix: Remove [!type] markers from callout content
     html = this.fixMathJaxTags(html); // Fix: Replace <mjx-container> with WeChat-compatible tags
     return `<section style="${this.getInlineStyle('section')}">${html}</section>`;
   }
@@ -389,6 +590,28 @@ ${macHeader}
   unwrapFigures(html) {
     // Logic: Match <p ...> <figure>...</figure> </p> and replace with <figure>...</figure>
     return html.replace(/<p[^>]*>\s*(<figure[\s\S]*?<\/figure>)\s*<\/p>/gi, '$1');
+  }
+
+  /**
+   * Fix: Clean up [!type] markers from Callout content
+   * After rendering, the first paragraph in a callout still contains the [!type] marker
+   * This removes it while preserving the rest of the content
+   *
+   * 场景分析：
+   * 1. `> [!note] 标题` -> `<p>[!note] 标题</p>` -> 应完全删除（标题已在标题栏显示）
+   * 2. `> [!note]` + 换行 + `> 内容` -> `<p>[!note]</p><p>内容</p>` -> 删除第一个 p，保留内容
+   * 3. `> [!note] 标题` + 换行 + `> 内容` -> `<p>[!note] 标题</p><p>内容</p>` -> 删除第一个 p
+   */
+  cleanCalloutMarkers(html) {
+    // 策略 1：移除只包含 [!type] 或 [!type] 标题 的段落（无 <br> 或其他内容）
+    // 匹配 <p>[!type]</p> 或 <p>[!type] 标题文本</p>（不含 <br>）
+    html = html.replace(/<p[^>]*>\s*\[!\w+\](?:\s+[^<]*)?\s*<\/p>/gi, '');
+
+    // 策略 2：如果段落以 [!type] 开头但后面还有 <br> + 内容，只移除 [!type] 前缀部分
+    // 匹配：<p>[!type] 标题<br>内容</p> -> <p>内容</p>
+    html = html.replace(/<p([^>]*)>\s*\[!\w+\][^<]*<br\s*\/?>/gi, '<p$1>');
+
+    return html;
   }
 
   escapeHtml(text) {
