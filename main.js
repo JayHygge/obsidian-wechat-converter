@@ -82,6 +82,8 @@ var WechatAPI = class {
         return await operation();
       } catch (error) {
         lastError = error;
+        if (error.isFatal)
+          throw error;
         const isConfigError = error.message && (error.message.includes("(40013)") || // invalid appid
         error.message.includes("(40125)") || // invalid appsecret
         error.message.includes("invalid appid"));
@@ -141,15 +143,23 @@ var WechatAPI = class {
     }
   }
   /**
+   * 验证代理 URL 安全性 (必须使用 HTTPS)
+   */
+  validateProxyUrl(proxyUrl) {
+    if (proxyUrl && !proxyUrl.toLowerCase().startsWith("https://")) {
+      const error = new Error("Security Error: Insecure HTTP proxy blocked. Proxy URL must use HTTPS.");
+      error.isFatal = true;
+      throw error;
+    }
+  }
+  /**
    * 发送请求（如果配置了代理，通过代理发送）
    * 纯粹的 HTTP 请求封装，不包含重试逻辑
    */
   async sendRequest(url, options = {}) {
     const { requestUrl } = require("obsidian");
     if (this.proxyUrl) {
-      if (!this.proxyUrl.startsWith("https://")) {
-        throw new Error("Security Error: Insecure HTTP proxy blocked. Proxy URL must use HTTPS.");
-      }
+      this.validateProxyUrl(this.proxyUrl);
       const proxyResponse = await requestUrl({
         url: this.proxyUrl,
         method: "POST",
@@ -211,6 +221,7 @@ var WechatAPI = class {
       const mimeType = blob.type || "image/jpeg";
       const ext = mimeType.includes("gif") ? "gif" : mimeType.includes("png") ? "png" : "jpg";
       if (this.proxyUrl) {
+        this.validateProxyUrl(this.proxyUrl);
         const reader = new FileReader();
         reader.readAsDataURL(blob);
         const base64Data = await new Promise((resolve, reject) => {
