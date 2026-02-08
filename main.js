@@ -147,6 +147,9 @@ var WechatAPI = class {
   async sendRequest(url, options = {}) {
     const { requestUrl } = require("obsidian");
     if (this.proxyUrl) {
+      if (!this.proxyUrl.startsWith("https://")) {
+        throw new Error("Security Error: Insecure HTTP proxy blocked. Proxy URL must use HTTPS.");
+      }
       const proxyResponse = await requestUrl({
         url: this.proxyUrl,
         method: "POST",
@@ -289,6 +292,7 @@ var AppleStyleView = class extends ItemView {
     this.sessionDigest = "";
     this.articleStates = /* @__PURE__ */ new Map();
     this.svgUploadCache = /* @__PURE__ */ new Map();
+    this.renderGeneration = 0;
   }
   getViewType() {
     return APPLE_STYLE_VIEW;
@@ -1410,6 +1414,7 @@ var AppleStyleView = class extends ItemView {
    * 转换当前文档
    */
   async convertCurrent(silent = false) {
+    const generation = ++this.renderGeneration;
     let activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
     let markdown = "";
     let sourcePath = "";
@@ -1442,6 +1447,8 @@ var AppleStyleView = class extends ItemView {
       if (this.converter)
         this.converter.updateSourcePath(sourcePath);
       const html = await this.converter.convert(markdown);
+      if (generation !== this.renderGeneration)
+        return;
       this.currentHtml = html;
       this.sessionCoverBase64 = null;
       const scrollTop = this.previewContainer.scrollTop;
@@ -1784,7 +1791,11 @@ var AppleStyleSettingTab = class extends PluginSettingTab {
         el.createSpan({ text: "\u{1F512} \u5B89\u5168\u63D0\u793A\uFF1A\u4EE3\u7406\u670D\u52A1\u5C06\u4E2D\u8F6C\u60A8\u7684\u8BF7\u6C42\u3002\u8BF7\u786E\u4FDD\u4F7F\u7528\u53D7\u4FE1\u4EFB\u7684\u4EE3\u7406\uFF08\u81EA\u5EFA\u6216\u53EF\u9760\u7B2C\u4E09\u65B9\uFF09\uFF0C\u4EE5\u4FDD\u62A4 AppSecret \u5B89\u5168\u3002" });
       });
     })).addText((text) => text.setPlaceholder("https://your-proxy.workers.dev").setValue(this.plugin.settings.proxyUrl).onChange(async (value) => {
-      this.plugin.settings.proxyUrl = value.trim();
+      const trimmedValue = value.trim();
+      if (trimmedValue && !trimmedValue.startsWith("https://")) {
+        new Notice("\u26A0\uFE0F \u5B89\u5168\u98CE\u9669\uFF1A\u4EE3\u7406\u5730\u5740\u5FC5\u987B\u4F7F\u7528 HTTPS \u4EE5\u4FDD\u62A4\u60A8\u7684 AppSecret\u3002");
+      }
+      this.plugin.settings.proxyUrl = trimmedValue;
       await this.plugin.saveSettings();
     }));
   }

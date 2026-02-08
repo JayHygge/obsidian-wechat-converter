@@ -105,29 +105,40 @@ window.AppleStyleConverter = class AppleStyleConverter {
   }
 
   setupRenderRules() {
-    this.md.renderer.rules.paragraph_open = () => `<p style="${this.getInlineStyle('p')}">`;
-    this.md.renderer.rules.heading_open = (tokens, idx) => `<${tokens[idx].tag} style="${this.getInlineStyle(tokens[idx].tag)}">`;
     // Callout & Blockquote 智能检测渲染
     this.md.renderer.rules.blockquote_open = (tokens, idx, options, env, self) => {
       // 查找 blockquote 内的第一个文本内容，检测是否为 callout 语法
       const calloutInfo = this.detectCallout(tokens, idx);
+
+      // 使用栈管理 callout 状态，支持嵌套
+      if (!env._calloutStack) env._calloutStack = [];
+      env._calloutStack.push(calloutInfo);
+
       if (calloutInfo) {
-        // 标记为 callout，后续 blockquote_close 会使用
-        env._calloutInfo = calloutInfo;
         return this.renderCalloutOpen(calloutInfo);
       }
       // 普通 blockquote
-      env._calloutInfo = null;
       return `<blockquote style="${this.getInlineStyle('blockquote')}">`;
     };
 
     this.md.renderer.rules.blockquote_close = (tokens, idx, options, env, self) => {
-      if (env._calloutInfo) {
-        env._calloutInfo = null;
+      const calloutInfo = env._calloutStack ? env._calloutStack.pop() : null;
+      if (calloutInfo) {
         return `</section></section>`; // 关闭内容区和外层容器
       }
       return `</blockquote>`;
     };
+
+    this.md.renderer.rules.paragraph_open = (tokens, idx) => {
+      if (tokens[idx].hidden) return '';
+      return `<p style="${this.getInlineStyle('p')}">`;
+    };
+
+    this.md.renderer.rules.paragraph_close = (tokens, idx) => {
+      if (tokens[idx].hidden) return '';
+      return `</p>`;
+    };
+    this.md.renderer.rules.heading_open = (tokens, idx) => `<${tokens[idx].tag} style="${this.getInlineStyle(tokens[idx].tag)}">`;
     this.md.renderer.rules.bullet_list_open = () => `<ul style="${this.getInlineStyle('ul')}">`;
     this.md.renderer.rules.ordered_list_open = () => `<ol style="${this.getInlineStyle('ol')}">`;
     this.md.renderer.rules.list_item_open = () => `<li style="${this.getInlineStyle('li')}">`;
@@ -141,7 +152,11 @@ window.AppleStyleConverter = class AppleStyleConverter {
       return this.createCodeBlock(content, lang);
     };
 
-    this.md.renderer.rules.link_open = (tokens, idx) => `<a href="${tokens[idx].attrGet('href')}" style="${this.getInlineStyle('a')}">`;
+    this.md.renderer.rules.link_open = (tokens, idx) => {
+      const href = tokens[idx].attrGet('href');
+      const safeHref = this.validateLink(href);
+      return `<a href="${safeHref}" style="${this.getInlineStyle('a')}">`;
+    };
     this.md.renderer.rules.strong_open = () => `<strong style="${this.getInlineStyle('strong')}">`;
     this.md.renderer.rules.em_open = () => `<em style="${this.getInlineStyle('em')}">`;
     this.md.renderer.rules.s_open = () => `<del style="${this.getInlineStyle('del')}">`;
@@ -199,6 +214,7 @@ window.AppleStyleConverter = class AppleStyleConverter {
 
   /**
    * 检测 blockquote 是否为 Callout 语法
+   * 并清理 marker 标识符
    * @param {Array} tokens - markdown-it tokens
    * @param {number} idx - blockquote_open 的索引
    * @returns {Object|null} - callout 信息 { type, title, icon, label } 或 null
@@ -208,16 +224,40 @@ window.AppleStyleConverter = class AppleStyleConverter {
     for (let i = idx + 1; i < tokens.length; i++) {
       if (tokens[i].type === 'blockquote_close') break;
       if (tokens[i].type === 'inline' && tokens[i].content) {
-        // 只取第一行内容进行匹配，防止多行内容被错误地当作标题
+        // 只取第一行内容进行匹配
         const firstLine = tokens[i].content.split('\n')[0];
         const match = firstLine.match(/^\[!(\w+)\](?:\s+(.*))?/);
         if (match) {
           const type = match[1].toLowerCase();
           const customTitle = match[2] ? match[2].trim() : null;
           const config = CALLOUT_ICONS[type] || { icon: '📌', label: type };
-          // 保留原始 type 作为默认标题（如 "warning"），不做翻译
-          // 首字母大写以提升可读性
           const defaultTitle = type.charAt(0).toUpperCase() + type.slice(1);
+
+          // --- 在 Token 阶段清理 Marker ---
+          // 1. 更新 content：移除包含 marker 的第一行
+          const lines = tokens[i].content.split('\n');
+          lines.shift();
+          tokens[i].content = lines.join('\n');
+
+          // 2. 更新 children：同步移除第一行对应的 tokens
+          if (tokens[i].children) {
+            const breakIdx = tokens[i].children.findIndex(c => c.type === 'softbreak' || c.type === 'hardbreak');
+            if (breakIdx !== -1) {
+              // 移除第一个换行符及其之前的所有内容
+              tokens[i].children = tokens[i].children.slice(breakIdx + 1);
+            } else {
+              // 只有一行，直接清空
+              tokens[i].children = [];
+            }
+          }
+
+          // 3. 如果该段落变为空（说明 marker 独占一行），隐藏该段落容器
+          if (tokens[i].content.trim() === '') {
+            if (i > 0 && tokens[i-1].type === 'paragraph_open') tokens[i-1].hidden = true;
+            tokens[i].hidden = true; // 隐藏 inline token 本身
+            if (i < tokens.length - 1 && tokens[i+1].type === 'paragraph_close') tokens[i+1].hidden = true;
+          }
+
           return {
             type,
             title: customTitle || defaultTitle,
@@ -515,8 +555,8 @@ ${macHeader}
     html = this.fixListParagraphs(html);
     html = this.unwrapFigures(html); // Fix: Remove <p> wrappers from <figure> to prevent empty lines
     html = this.removeBlockquoteParagraphMargins(html); // Fix: Remove margins from <p> inside <blockquote> for vertical centering
-    html = this.cleanCalloutMarkers(html); // Fix: Remove [!type] markers from callout content
     html = this.fixMathJaxTags(html); // Fix: Replace <mjx-container> with WeChat-compatible tags
+    html = this.sanitizeHtml(html); // Final security pass: Neutralize XSS and dangerous tags
     return `<section style="${this.getInlineStyle('section')}">${html}</section>`;
   }
 
@@ -592,26 +632,31 @@ ${macHeader}
     return html.replace(/<p[^>]*>\s*(<figure[\s\S]*?<\/figure>)\s*<\/p>/gi, '$1');
   }
 
-  /**
-   * Fix: Clean up [!type] markers from Callout content
-   * After rendering, the first paragraph in a callout still contains the [!type] marker
-   * This removes it while preserving the rest of the content
-   *
-   * 场景分析：
-   * 1. `> [!note] 标题` -> `<p>[!note] 标题</p>` -> 应完全删除（标题已在标题栏显示）
-   * 2. `> [!note]` + 换行 + `> 内容` -> `<p>[!note]</p><p>内容</p>` -> 删除第一个 p，保留内容
-   * 3. `> [!note] 标题` + 换行 + `> 内容` -> `<p>[!note] 标题</p><p>内容</p>` -> 删除第一个 p
-   */
-  cleanCalloutMarkers(html) {
-    // 策略 1：移除只包含 [!type] 或 [!type] 标题 的段落（无 <br> 或其他内容）
-    // 匹配 <p>[!type]</p> 或 <p>[!type] 标题文本</p>（不含 <br>）
-    html = html.replace(/<p[^>]*>\s*\[!\w+\](?:\s+[^<]*)?\s*<\/p>/gi, '');
+  validateLink(url) {
+    if (!url) return '#';
+    // Allow safe protocols
+    const safeProtocols = ['http:', 'https:', 'obsidian:', 'mailto:', 'tel:', 'data:'];
+    try {
+      const parsed = new URL(url);
+      if (safeProtocols.includes(parsed.protocol)) return url;
+    } catch (e) {
+      // Handle relative paths or Obsidian internal links that URL() can't parse
+      if (url.startsWith('#') || url.startsWith('/') || !url.includes(':')) return url;
+    }
+    return '#'; // Block javascript: and other dangerous protocols
+  }
 
-    // 策略 2：如果段落以 [!type] 开头但后面还有 <br> + 内容，只移除 [!type] 前缀部分
-    // 匹配：<p>[!type] 标题<br>内容</p> -> <p>内容</p>
-    html = html.replace(/<p([^>]*)>\s*\[!\w+\][^<]*<br\s*\/?>/gi, '<p$1>');
+  sanitizeHtml(html) {
+    // 1. Remove dangerous tags and their content
+    let sanitized = html.replace(/<(script|iframe|object|embed|form|input|button|style)[^>]*>[\s\S]*?<\/\1>/gi, '');
+    // 2. Remove self-closing dangerous tags
+    sanitized = sanitized.replace(/<(script|iframe|object|embed|form|input|button|style)[^>]*\/?>/gi, '');
+    // 3. Remove all on* event handlers (e.g., onerror, onclick)
+    sanitized = sanitized.replace(/\s+on\w+\s*=\s*"[^"]*"/gi, '');
+    sanitized = sanitized.replace(/\s+on\w+\s*=\s*'[^']*'/gi, '');
+    sanitized = sanitized.replace(/\s+on\w+\s*=\s*[^\s>]+/gi, '');
 
-    return html;
+    return sanitized;
   }
 
   escapeHtml(text) {

@@ -185,6 +185,9 @@ class WechatAPI {
     const { requestUrl } = require('obsidian');
 
     if (this.proxyUrl) {
+      if (!this.proxyUrl.startsWith('https://')) {
+        throw new Error('Security Error: Insecure HTTP proxy blocked. Proxy URL must use HTTPS.');
+      }
       // 通过代理发送
       const proxyResponse = await requestUrl({
         url: this.proxyUrl,
@@ -360,6 +363,8 @@ class AppleStyleView extends ItemView {
     // 公式/SVG 上传缓存：Map<Hash, WechatURL>
     // 避免重复上传相同的公式，节省微信 API 调用额度 (Quota) 并提升速度
     this.svgUploadCache = new Map();
+
+    this.renderGeneration = 0;
   }
 
   getViewType() {
@@ -1843,6 +1848,7 @@ class AppleStyleView extends ItemView {
    * 转换当前文档
    */
   async convertCurrent(silent = false) {
+    const generation = ++this.renderGeneration;
     let activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
     let markdown = '';
     let sourcePath = '';
@@ -1874,6 +1880,9 @@ class AppleStyleView extends ItemView {
       if (this.converter) this.converter.updateSourcePath(sourcePath);
 
       const html = await this.converter.convert(markdown);
+
+      if (generation !== this.renderGeneration) return;
+
       this.currentHtml = html;
       // 重置手动上传的封面，确保切换文章时不会残留上一篇的封面
       this.sessionCoverBase64 = null;
@@ -2361,7 +2370,11 @@ class AppleStyleSettingTab extends PluginSettingTab {
         .setPlaceholder('https://your-proxy.workers.dev')
         .setValue(this.plugin.settings.proxyUrl)
         .onChange(async (value) => {
-          this.plugin.settings.proxyUrl = value.trim();
+          const trimmedValue = value.trim();
+          if (trimmedValue && !trimmedValue.startsWith('https://')) {
+            new Notice('⚠️ 安全风险：代理地址必须使用 HTTPS 以保护您的 AppSecret。');
+          }
+          this.plugin.settings.proxyUrl = trimmedValue;
           await this.plugin.saveSettings();
         }));
   }

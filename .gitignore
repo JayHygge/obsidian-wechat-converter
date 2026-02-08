@@ -5,3 +5,5 @@ workspace.json
 xgplayer/
 *.zip
 coverage/
+
+ClaudeFix.md

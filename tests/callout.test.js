@@ -37,12 +37,12 @@ describe('Callout Syntax Support', () => {
   });
 
   describe('detectCallout', () => {
-    it('should detect basic callout syntax [!note]', () => {
-      // Simulate markdown-it tokens for "> [!note] Title"
+    it('should detect basic callout syntax [!note] and clean tokens', () => {
+      // Simulate markdown-it tokens for "> [!note] Title\n> Content"
       const tokens = [
         { type: 'blockquote_open', tag: 'blockquote', nesting: 1 },
         { type: 'paragraph_open', tag: 'p', nesting: 1 },
-        { type: 'inline', content: '[!note] 这是标题', children: [] },
+        { type: 'inline', content: '[!note] 这是标题\n内容', children: [{ type: 'text', content: '[!note] 这是标题' }, { type: 'softbreak' }, { type: 'text', content: '内容' }] },
         { type: 'paragraph_close', tag: 'p', nesting: -1 },
         { type: 'blockquote_close', tag: 'blockquote', nesting: -1 },
       ];
@@ -52,7 +52,28 @@ describe('Callout Syntax Support', () => {
       expect(result).not.toBeNull();
       expect(result.type).toBe('note');
       expect(result.title).toBe('这是标题');
-      expect(result.icon).toBe('ℹ️');
+
+      // Verification of token cleaning
+      expect(tokens[2].content).toBe('内容');
+      // Children after the first line break should be preserved (logic removes up to first break)
+      expect(tokens[2].children.length).toBe(1);
+      expect(tokens[2].children[0].content).toBe('内容');
+    });
+
+    it('should hide paragraph if marker is the only content', () => {
+      const tokens = [
+        { type: 'blockquote_open', tag: 'blockquote', nesting: 1 },
+        { type: 'paragraph_open', tag: 'p', nesting: 1 },
+        { type: 'inline', content: '[!info]', children: [] },
+        { type: 'paragraph_close', tag: 'p', nesting: -1 },
+        { type: 'blockquote_close', tag: 'blockquote', nesting: -1 },
+      ];
+
+      converter.detectCallout(tokens, 0);
+
+      expect(tokens[1].hidden).toBe(true); // paragraph_open
+      expect(tokens[2].hidden).toBe(true); // inline
+      expect(tokens[3].hidden).toBe(true); // paragraph_close
     });
 
     it('should detect callout without custom title', () => {
@@ -292,38 +313,62 @@ describe('Callout Syntax Support', () => {
     });
   });
 
-  describe('cleanCalloutMarkers', () => {
-    it('should remove standalone [!type] paragraph', () => {
-      const inputHtml = '<p style="margin: 0;">[!note] 标题</p><p>内容</p>';
-      const outputHtml = converter.cleanCalloutMarkers(inputHtml);
-
-      expect(outputHtml).not.toContain('[!note]');
-      expect(outputHtml).toContain('内容');
+  describe('Integration: convert() and Marker Preservation', () => {
+    // For these tests, we need a slightly more functional markdown-it mock
+    // that actually uses our rules
+    beforeEach(() => {
+      const rules = {};
+      const env = {};
+      converter.md = {
+        renderer: { rules },
+        render: vi.fn((md) => {
+          // Simple mock-render that simulates our rule behavior for specific test strings
+          if (md.includes('> [!note]')) {
+             const open = rules.blockquote_open([{type:'blockquote_open'}], 0, {}, env);
+             const close = rules.blockquote_close([{type:'blockquote_close'}], 0, {}, env);
+             return `${open}<p>Content</p>${close}`;
+          }
+          if (md.includes('[!preserve]')) {
+             return `<p>[!preserve] text</p>`;
+          }
+          return md;
+        })
+      };
+      // Re-setup rules on the mock
+      converter.setupRenderRules();
     });
 
-    it('should remove [!type] prefix from paragraph with trailing content', () => {
-      const inputHtml = '<p style="color: red;">[!warning] 后面还有内容</p>';
-      const outputHtml = converter.cleanCalloutMarkers(inputHtml);
+    it('should properly manage stack for nested blockquotes', () => {
+      const env = { _calloutStack: [] };
+      const rules = converter.md.renderer.rules;
 
-      // The first regex removes entire paragraph if it only contains marker
-      // The second regex removes marker prefix if there's more content
-      expect(outputHtml).not.toContain('[!warning]');
+      // Layer 1: Callout
+      vi.spyOn(converter, 'detectCallout').mockReturnValueOnce({ type: 'note' });
+      const html1 = rules.blockquote_open([{type:'blockquote_open'}], 0, {}, env);
+
+      // Layer 2: Regular quote
+      vi.spyOn(converter, 'detectCallout').mockReturnValueOnce(null);
+      const html2 = rules.blockquote_open([{type:'blockquote_open'}], 0, {}, env);
+
+      expect(env._calloutStack.length).toBe(2);
+      expect(env._calloutStack[0]).not.toBeNull(); // note
+      expect(env._calloutStack[1]).toBeNull();    // regular
+
+      // Close layer 2
+      const close2 = rules.blockquote_close([], 0, {}, env);
+      expect(close2).toBe('</blockquote>');
+
+      // Close layer 1
+      const close1 = rules.blockquote_close([], 0, {}, env);
+      expect(close1).toBe('</section></section>');
+
+      expect(env._calloutStack.length).toBe(0);
     });
 
-    it('should not affect regular blockquote content', () => {
-      const inputHtml = '<p>普通引用块内容</p>';
-      const outputHtml = converter.cleanCalloutMarkers(inputHtml);
-
-      expect(outputHtml).toBe(inputHtml);
-    });
-
-    it('should handle multiple callout markers in content', () => {
-      const inputHtml = '<p>[!note]</p><p>[!warning] text</p><p>normal</p>';
-      const outputHtml = converter.cleanCalloutMarkers(inputHtml);
-
-      expect(outputHtml).not.toContain('[!note]');
-      expect(outputHtml).not.toContain('[!warning]');
-      expect(outputHtml).toContain('normal');
+    it('should preserve [!type] markers in regular paragraphs (Regression Fix)', async () => {
+      const markdown = 'This is [!preserve] text, not a callout.';
+      const html = await converter.convert(markdown);
+      expect(html).toContain('[!preserve]');
     });
   });
 });
