@@ -39,7 +39,7 @@ describe('Security Sanitization', () => {
 
   it('should neutralize javascript: links via validateLink', () => {
     expect(converter.validateLink('javascript:alert(1)')).toBe('#');
-    expect(converter.validateLink('data:text/html,<html>')).toBe('data:text/html,<html>'); // Allowed in our whitelist but handled by OS/Browser
+    expect(converter.validateLink('data:text/html,<html>')).toBe('#unsafe'); // Context is link, should be neutralized
     expect(converter.validateLink('https://google.com')).toBe('https://google.com');
     expect(converter.validateLink('obsidian://open?vault=test')).toBe('obsidian://open?vault=test');
   });
@@ -55,7 +55,9 @@ describe('Security Sanitization', () => {
   it('should remove onerror and other event handlers', () => {
     const malicious = '<img src=x onerror=alert(1) onclick="malicious()">';
     const sanitized = converter.sanitizeHtml(malicious);
-    expect(sanitized).toContain('<img src=x');
+    // The sanitizer adds quotes and validates protocol.
+    // "x" is an internal path (no colon), allowed by validateLink for Obsidian compatibility.
+    expect(sanitized).toContain('src="x"');
     expect(sanitized).not.toContain('onerror');
     expect(sanitized).not.toContain('onclick');
   });
@@ -65,6 +67,8 @@ describe('Security Sanitization', () => {
       attrGet: () => 'javascript:alert(1)',
       type: 'link_open'
     }];
+    // Mock getInlineStyle
+    converter.getInlineStyle = () => '';
     const html = converter.md.renderer.rules.link_open(tokens, 0);
     expect(html).toContain('href="#"');
     expect(html).not.toContain('javascript:');

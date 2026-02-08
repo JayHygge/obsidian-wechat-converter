@@ -632,13 +632,20 @@ ${macHeader}
     return html.replace(/<p[^>]*>\s*(<figure[\s\S]*?<\/figure>)\s*<\/p>/gi, '$1');
   }
 
-  validateLink(url) {
+  validateLink(url, isImage = false) {
     if (!url) return '#';
     // Allow safe protocols
-    const safeProtocols = ['http:', 'https:', 'obsidian:', 'mailto:', 'tel:', 'data:'];
+    // data: is only allowed for images
+    const safeProtocols = ['http:', 'https:', 'obsidian:', 'mailto:', 'tel:'];
+    if (isImage) safeProtocols.push('data:');
+
     try {
+      // URL constructor might fail for some internal links or malformed data URIs
       const parsed = new URL(url);
       if (safeProtocols.includes(parsed.protocol)) return url;
+
+      // If it's a data: URI but not an image context, neutralize it explicitly
+      if (parsed.protocol === 'data:' && !isImage) return '#unsafe';
     } catch (e) {
       // Handle relative paths or Obsidian internal links that URL() can't parse
       if (url.startsWith('#') || url.startsWith('/') || !url.includes(':')) return url;
@@ -655,6 +662,18 @@ ${macHeader}
     sanitized = sanitized.replace(/\s+on\w+\s*=\s*"[^"]*"/gi, '');
     sanitized = sanitized.replace(/\s+on\w+\s*=\s*'[^']*'/gi, '');
     sanitized = sanitized.replace(/\s+on\w+\s*=\s*[^\s>]+/gi, '');
+
+    // 4. Sanitize href and src in remaining HTML tags to prevent protocol bypass (e.g. <a href="javascript:...")
+    sanitized = sanitized.replace(/<(a|img|source|video|audio|area)\b([^>]*)>/gi, (match, tag, attrs) => {
+      const isImageTag = /^(img|source)$/i.test(tag);
+      let newAttrs = attrs.replace(/\b(href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi, (attrMatch, attrName, qVal, sqVal, uVal) => {
+        const val = qVal || sqVal || uVal || '';
+        const safeVal = this.validateLink(val, isImageTag);
+        const quote = qVal !== undefined ? '"' : (sqVal !== undefined ? "'" : '"');
+        return `${attrName}=${quote}${safeVal}${quote}`;
+      });
+      return `<${tag}${newAttrs}>`;
+    });
 
     return sanitized;
   }
