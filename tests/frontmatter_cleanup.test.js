@@ -86,6 +86,15 @@ describe('AppleStyleView - Frontmatter Meta & Configured Directory Cleanup', () 
     expect(meta.coverSrc).toBe('app://local/published/post_img/post-cover.jpg');
   });
 
+  it('should fallback to lastActiveFile when active file is unavailable', () => {
+    view.lastActiveFile = activeFile;
+    view.app.workspace.getActiveFile = vi.fn(() => null);
+
+    const contextFile = view.getPublishContextFile();
+
+    expect(contextFile).toBe(activeFile);
+  });
+
   it('should fallback silently when frontmatter cover path cannot be resolved', () => {
     files.delete('published/post_img/post-cover.jpg');
 
@@ -214,6 +223,34 @@ describe('AppleStyleView - Frontmatter Meta & Configured Directory Cleanup', () 
     expect(result.warning).toContain('frontmatter');
   });
 
+  it('should clear frontmatter paths when cleanup dir matches by tail path', async () => {
+    frontmatter = {
+      excerpt: '摘要',
+      cover: 'published/img/post-cover.jpg',
+      cover_dir: 'published/img',
+    };
+    view.app.metadataCache.getFileCache = vi.fn(() => ({ frontmatter }));
+
+    await view.clearInvalidPublishMetaAfterCleanup(activeFile, 'Wechat/published/img');
+
+    expect(frontmatter.cover).toBe('');
+    expect(frontmatter.cover_dir).toBe('');
+  });
+
+  it('should not clear remote/data URL values in frontmatter after cleanup', async () => {
+    frontmatter = {
+      excerpt: '摘要',
+      cover: 'https://cdn.example.com/published/img/post-cover.jpg',
+      cover_dir: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA',
+    };
+    view.app.metadataCache.getFileCache = vi.fn(() => ({ frontmatter }));
+
+    await view.clearInvalidPublishMetaAfterCleanup(activeFile, 'Wechat/published/img');
+
+    expect(frontmatter.cover).toBe('https://cdn.example.com/published/img/post-cover.jpg');
+    expect(frontmatter.cover_dir).toBe('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA');
+  });
+
   it('should trigger cleanup only after createDraft succeeds', async () => {
     plugin.settings.cleanupAfterSync = true;
     plugin.settings.cleanupDirTemplate = 'published/{{note}}_img';
@@ -273,6 +310,30 @@ describe('AppleStyleView - Frontmatter Meta & Configured Directory Cleanup', () 
 
     expect(createDraftSpy).toHaveBeenCalledTimes(1);
     expect(view.cleanupConfiguredDirectory).not.toHaveBeenCalled();
+
+    uploadCoverSpy.mockRestore();
+    createDraftSpy.mockRestore();
+  });
+
+  it('should use lastActiveFile for sync when active file is unavailable', async () => {
+    view.currentHtml = '<p>正文</p>';
+    view.selectedAccountId = 'acc1';
+    view.lastActiveFile = activeFile;
+    view.app.workspace.getActiveFile = vi.fn(() => null);
+
+    const publishMetaSpy = vi.spyOn(view, 'getFrontmatterPublishMeta');
+    view.srcToBlob = vi.fn().mockResolvedValue(new Blob(['x'], { type: 'image/jpeg' }));
+    view.processAllImages = vi.fn().mockResolvedValue('<p>正文</p>');
+    view.cleanHtmlForDraft = vi.fn((html) => html);
+    view.getFirstImageFromArticle = vi.fn(() => 'app://local/published/post_img/post-cover.jpg');
+
+    const uploadCoverSpy = vi.spyOn(WechatAPI.prototype, 'uploadCover').mockResolvedValue({ media_id: 'mid_1' });
+    const createDraftSpy = vi.spyOn(WechatAPI.prototype, 'createDraft').mockResolvedValue({});
+
+    await view.onSyncToWechat();
+
+    expect(publishMetaSpy).toHaveBeenCalledWith(activeFile);
+    expect(createDraftSpy).toHaveBeenCalledTimes(1);
 
     uploadCoverSpy.mockRestore();
     createDraftSpy.mockRestore();

@@ -782,6 +782,20 @@ var AppleStyleView = class extends ItemView {
     return null;
   }
   /**
+   * 获取当前发布上下文文件：
+   * 1) 优先当前活动文件
+   * 2) 回退到最近一次活动文件（侧边栏切换 tab 后常见）
+   */
+  getPublishContextFile() {
+    var _a, _b, _c;
+    const activeFile = (_c = (_b = (_a = this.app) == null ? void 0 : _a.workspace) == null ? void 0 : _b.getActiveFile) == null ? void 0 : _c.call(_b);
+    if (activeFile)
+      return activeFile;
+    if (this.lastActiveFile)
+      return this.lastActiveFile;
+    return null;
+  }
+  /**
    * 读取当前文档 frontmatter 中的发布元数据
    * @returns {{ excerpt: string, cover: string, cover_dir: string, coverSrc: string|null }}
    */
@@ -847,6 +861,30 @@ var AppleStyleView = class extends ItemView {
       return true;
     return file.startsWith(`${dir}/`);
   }
+  isPathInsideDirectoryByTail(filePath, dirPath) {
+    const file = this.normalizeVaultPath(filePath);
+    const dir = this.normalizeVaultPath(dirPath);
+    if (!file || !dir)
+      return false;
+    const dirSegments = dir.split("/").filter(Boolean);
+    if (dirSegments.length < 2)
+      return false;
+    for (let i = 1; i <= dirSegments.length - 2; i++) {
+      const tailDir = dirSegments.slice(i).join("/");
+      if (this.isPathInsideDirectory(file, tailDir)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  shouldClearFrontmatterPathAfterCleanup(pathValue, cleanedDir) {
+    const normalized = this.normalizeVaultPath(pathValue);
+    if (!normalized)
+      return false;
+    if (this.isPathInsideDirectory(normalized, cleanedDir))
+      return true;
+    return this.isPathInsideDirectoryByTail(normalized, cleanedDir);
+  }
   async clearInvalidPublishMetaAfterCleanup(activeFile, cleanedDirPath) {
     if (!activeFile || !cleanedDirPath)
       return null;
@@ -860,12 +898,12 @@ var AppleStyleView = class extends ItemView {
         const coverMap = this.getFrontmatterKeyMap(frontmatter, ["cover"]);
         const coverDirMap = this.getFrontmatterKeyMap(frontmatter, ["cover_dir", "coverDir", "cover-dir", "coverdir", "CoverDIR"]);
         for (const [key, value] of Object.entries(coverMap)) {
-          if (this.isPathInsideDirectory(value, cleanedDir)) {
+          if (this.shouldClearFrontmatterPathAfterCleanup(value, cleanedDir)) {
             frontmatter[key] = "";
           }
         }
         for (const [key, value] of Object.entries(coverDirMap)) {
-          if (this.isPathInsideDirectory(value, cleanedDir)) {
+          if (this.shouldClearFrontmatterPathAfterCleanup(value, cleanedDir)) {
             frontmatter[key] = "";
           }
         }
@@ -1000,7 +1038,7 @@ var AppleStyleView = class extends ItemView {
     const modal = new Modal(this.app);
     modal.titleEl.setText("\u540C\u6B65\u5230\u5FAE\u4FE1\u8349\u7A3F\u7BB1");
     modal.contentEl.addClass("wechat-sync-modal");
-    const activeFile = this.app.workspace.getActiveFile();
+    const activeFile = this.getPublishContextFile();
     const currentPath = activeFile ? activeFile.path : null;
     const frontmatterMeta = this.getFrontmatterPublishMeta(activeFile);
     let cachedState = null;
@@ -1133,7 +1171,7 @@ var AppleStyleView = class extends ItemView {
       return;
     }
     const notice = new Notice(`\u{1F680} \u6B63\u5728\u4F7F\u7528 ${account.name} \u540C\u6B65...`, 0);
-    const activeFile = this.app.workspace.getActiveFile();
+    const activeFile = this.getPublishContextFile();
     const publishMeta = this.getFrontmatterPublishMeta(activeFile);
     try {
       const api = new WechatAPI(account.appId, account.appSecret, this.plugin.settings.proxyUrl);

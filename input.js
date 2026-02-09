@@ -1035,6 +1035,18 @@ class AppleStyleView extends ItemView {
   }
 
   /**
+   * 获取当前发布上下文文件：
+   * 1) 优先当前活动文件
+   * 2) 回退到最近一次活动文件（侧边栏切换 tab 后常见）
+   */
+  getPublishContextFile() {
+    const activeFile = this.app?.workspace?.getActiveFile?.();
+    if (activeFile) return activeFile;
+    if (this.lastActiveFile) return this.lastActiveFile;
+    return null;
+  }
+
+  /**
    * 读取当前文档 frontmatter 中的发布元数据
    * @returns {{ excerpt: string, cover: string, cover_dir: string, coverSrc: string|null }}
    */
@@ -1100,6 +1112,33 @@ class AppleStyleView extends ItemView {
     return file.startsWith(`${dir}/`);
   }
 
+  isPathInsideDirectoryByTail(filePath, dirPath) {
+    const file = this.normalizeVaultPath(filePath);
+    const dir = this.normalizeVaultPath(dirPath);
+    if (!file || !dir) return false;
+
+    const dirSegments = dir.split('/').filter(Boolean);
+    if (dirSegments.length < 2) return false;
+
+    // 允许清理目录与 frontmatter 路径存在“根前缀差异”
+    // 例如 cleanedDir: Wechat/published/img
+    //      cover:     published/img/post-cover.jpg
+    for (let i = 1; i <= dirSegments.length - 2; i++) {
+      const tailDir = dirSegments.slice(i).join('/');
+      if (this.isPathInsideDirectory(file, tailDir)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  shouldClearFrontmatterPathAfterCleanup(pathValue, cleanedDir) {
+    const normalized = this.normalizeVaultPath(pathValue);
+    if (!normalized) return false;
+    if (this.isPathInsideDirectory(normalized, cleanedDir)) return true;
+    return this.isPathInsideDirectoryByTail(normalized, cleanedDir);
+  }
+
   async clearInvalidPublishMetaAfterCleanup(activeFile, cleanedDirPath) {
     if (!activeFile || !cleanedDirPath) return null;
 
@@ -1114,13 +1153,13 @@ class AppleStyleView extends ItemView {
         const coverDirMap = this.getFrontmatterKeyMap(frontmatter, ['cover_dir', 'coverDir', 'cover-dir', 'coverdir', 'CoverDIR']);
 
         for (const [key, value] of Object.entries(coverMap)) {
-          if (this.isPathInsideDirectory(value, cleanedDir)) {
+          if (this.shouldClearFrontmatterPathAfterCleanup(value, cleanedDir)) {
             frontmatter[key] = '';
           }
         }
 
         for (const [key, value] of Object.entries(coverDirMap)) {
-          if (this.isPathInsideDirectory(value, cleanedDir)) {
+          if (this.shouldClearFrontmatterPathAfterCleanup(value, cleanedDir)) {
             frontmatter[key] = '';
           }
         }
@@ -1276,7 +1315,7 @@ class AppleStyleView extends ItemView {
     modal.contentEl.addClass('wechat-sync-modal');
 
     // 获取当前活动文件的路径，用于状态缓存
-    const activeFile = this.app.workspace.getActiveFile();
+    const activeFile = this.getPublishContextFile();
     const currentPath = activeFile ? activeFile.path : null;
     const frontmatterMeta = this.getFrontmatterPublishMeta(activeFile);
 
@@ -1462,7 +1501,7 @@ class AppleStyleView extends ItemView {
     }
 
     const notice = new Notice(`🚀 正在使用 ${account.name} 同步...`, 0);
-    const activeFile = this.app.workspace.getActiveFile();
+    const activeFile = this.getPublishContextFile();
     const publishMeta = this.getFrontmatterPublishMeta(activeFile);
 
     try {
