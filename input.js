@@ -36,6 +36,7 @@ const DEFAULT_SETTINGS = {
   // 渲染管线开关（Phase 1: 兼容层实验）
   useNativePipeline: false,
   enableLegacyFallback: true,
+  enforceNativeParity: true, // Phase 2: strict byte-level parity gate
   // 排版设置
   sidePadding: 16, // 页面两侧留白 (px)
   coloredHeader: false, // 标题是否使用主题色
@@ -1754,6 +1755,8 @@ class AppleStyleView extends ItemView {
     return {
       useNativePipeline: this.plugin?.settings?.useNativePipeline === true,
       enableLegacyFallback: this.plugin?.settings?.enableLegacyFallback !== false,
+      enforceNativeParity: this.plugin?.settings?.enforceNativeParity !== false,
+      parityTransform: (html) => this.cleanHtmlForDraft(html),
     };
   }
 
@@ -2353,6 +2356,20 @@ class AppleStyleSettingTab extends PluginSettingTab {
         .onChange(async (value) => {
           this.plugin.settings.enableLegacyFallback = value;
           await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('零差异门禁（Phase 2）')
+      .setDesc('开启后会将实验渲染输出与 Legacy 输出进行字节级对比；若不一致则自动回退 Legacy。建议保持开启。')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.enforceNativeParity !== false)
+        .onChange(async (value) => {
+          this.plugin.settings.enforceNativeParity = value;
+          await this.plugin.saveSettings();
+          const converterView = this.plugin.getConverterView();
+          if (converterView) {
+            await converterView.convertCurrent(true);
+          }
         }));
 
     new Setting(containerEl)

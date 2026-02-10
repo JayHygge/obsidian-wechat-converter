@@ -49,5 +49,33 @@ describe('AppleStylePlugin - Settings Migration', () => {
     expect(plugin.settings.cleanupTarget).toBeUndefined();
     expect(plugin.saveData).toHaveBeenCalledTimes(1);
   });
-});
 
+  it('should default enforceNativeParity to true when setting is missing', async () => {
+    const plugin = new AppleStylePlugin();
+    plugin.loadData = vi.fn().mockResolvedValue({
+      wechatAccounts: [],
+      defaultAccountId: '',
+    });
+    plugin.saveData = vi.fn().mockResolvedValue(undefined);
+
+    await plugin.loadSettings();
+
+    expect(plugin.settings.enforceNativeParity).toBe(true);
+    expect(plugin.saveData).not.toHaveBeenCalled();
+  });
+
+  it('should keep enforceNativeParity false when explicitly configured', async () => {
+    const plugin = new AppleStylePlugin();
+    plugin.loadData = vi.fn().mockResolvedValue({
+      enforceNativeParity: false,
+      wechatAccounts: [],
+      defaultAccountId: '',
+    });
+    plugin.saveData = vi.fn().mockResolvedValue(undefined);
+
+    await plugin.loadSettings();
+
+    expect(plugin.settings.enforceNativeParity).toBe(false);
+    expect(plugin.saveData).not.toHaveBeenCalled();
+  });
+});

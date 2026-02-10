@@ -1,3 +1,5 @@
+const { isStrictHtmlParity, buildParityMismatchDetails } = require('./parity-gate');
+
 class LegacyRenderPipeline {
   constructor(converter) {
     this.converter = converter;
@@ -32,6 +34,8 @@ class NativeRenderPipeline {
 
   async renderForPreview(markdown, context = {}) {
     const flags = this.getFlags() || {};
+    const strictParity = flags.enforceNativeParity === true;
+    const parityTransform = typeof flags.parityTransform === 'function' ? flags.parityTransform : null;
 
     // Phase 1 behavior freeze: if native renderer is not implemented,
     // fallback to legacy path by default.
@@ -43,7 +47,45 @@ class NativeRenderPipeline {
     }
 
     try {
-      return await this.nativeRenderer(markdown, context);
+      const nativeHtml = await this.nativeRenderer(markdown, context);
+
+      if (!strictParity || !this.legacyPipeline) {
+        return nativeHtml;
+      }
+
+      const legacyHtml = await this.legacyPipeline.renderForPreview(markdown, context);
+      const parityLegacyHtml = parityTransform
+        ? parityTransform(legacyHtml, { markdown, context, pipeline: 'legacy' })
+        : legacyHtml;
+      const parityNativeHtml = parityTransform
+        ? parityTransform(nativeHtml, { markdown, context, pipeline: 'native' })
+        : nativeHtml;
+
+      if (isStrictHtmlParity(parityLegacyHtml, parityNativeHtml)) {
+        return nativeHtml;
+      }
+
+      const mismatch = buildParityMismatchDetails(parityLegacyHtml, parityNativeHtml);
+      const parityError = new Error(
+        `[RenderPipeline] Parity mismatch at index ${mismatch.index}`
+      );
+      parityError.code = 'PARITY_MISMATCH';
+      parityError.parity = mismatch;
+
+      if (typeof flags.onParityMismatch === 'function') {
+        flags.onParityMismatch({
+          markdown,
+          context,
+          mismatch,
+        });
+      }
+
+      if (flags.enableLegacyFallback !== false && this.legacyPipeline) {
+        console.warn('[RenderPipeline] Native parity mismatch, fallback to legacy:', mismatch.index);
+        return legacyHtml;
+      }
+
+      throw parityError;
     } catch (error) {
       if (flags.enableLegacyFallback !== false && this.legacyPipeline) {
         console.warn('[RenderPipeline] Native render failed, fallback to legacy:', error?.message || error);

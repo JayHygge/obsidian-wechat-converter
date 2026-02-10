@@ -1,0 +1,14 @@
+[
+  {
+    "id": "control-main",
+    "fixture": "control-main.md",
+    "sourcePath": "fixtures/control-main.md",
+    "expectParityMismatch": false
+  },
+  {
+    "id": "control-micro",
+    "fixture": "control-micro.md",
+    "sourcePath": "fixtures/control-micro.md",
+    "expectParityMismatch": true
+  }
+]

@@ -98,6 +98,152 @@ describe('Render Pipeline Switch (Native + Legacy Fallback)', () => {
     expect(legacy.renderForPreview).not.toHaveBeenCalled();
   });
 
+  it('native pipeline should fallback to legacy on parity mismatch when gate is enabled', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const paritySpy = vi.fn();
+    const nativeRenderer = vi.fn().mockResolvedValue('<section>native</section>');
+    const legacy = { renderForPreview: vi.fn().mockResolvedValue('<section>legacy</section>') };
+    const native = new NativeRenderPipeline({
+      nativeRenderer,
+      legacyPipeline: legacy,
+      getFlags: () => ({
+        useNativePipeline: true,
+        enableLegacyFallback: true,
+        enforceNativeParity: true,
+        onParityMismatch: paritySpy,
+      }),
+    });
+
+    const html = await native.renderForPreview('body', { sourcePath: 'a.md' });
+    expect(html).toBe('<section>legacy</section>');
+    expect(paritySpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('native pipeline should throw on parity mismatch when fallback is disabled', async () => {
+    const nativeRenderer = vi.fn().mockResolvedValue('<section>native</section>');
+    const legacy = { renderForPreview: vi.fn().mockResolvedValue('<section>legacy</section>') };
+    const native = new NativeRenderPipeline({
+      nativeRenderer,
+      legacyPipeline: legacy,
+      getFlags: () => ({
+        useNativePipeline: true,
+        enableLegacyFallback: false,
+        enforceNativeParity: true,
+      }),
+    });
+
+    await expect(native.renderForPreview('body')).rejects.toMatchObject({
+      code: 'PARITY_MISMATCH',
+    });
+  });
+
+  it('native pipeline should pass parity gate when html is exactly equal', async () => {
+    const nativeRenderer = vi.fn().mockResolvedValue('<section>same</section>');
+    const legacy = { renderForPreview: vi.fn().mockResolvedValue('<section>same</section>') };
+    const native = new NativeRenderPipeline({
+      nativeRenderer,
+      legacyPipeline: legacy,
+      getFlags: () => ({
+        useNativePipeline: true,
+        enableLegacyFallback: true,
+        enforceNativeParity: true,
+      }),
+    });
+
+    const html = await native.renderForPreview('body');
+    expect(html).toBe('<section>same</section>');
+  });
+
+  it('native pipeline should use parityTransform output for parity check', async () => {
+    const paritySpy = vi.fn();
+    const nativeRenderer = vi.fn().mockResolvedValue('<section>native:<strong>x</strong></section>');
+    const legacy = { renderForPreview: vi.fn().mockResolvedValue('<section>legacy:**x**</section>') };
+    const native = new NativeRenderPipeline({
+      nativeRenderer,
+      legacyPipeline: legacy,
+      getFlags: () => ({
+        useNativePipeline: true,
+        enableLegacyFallback: true,
+        enforceNativeParity: true,
+        parityTransform: (html) => html.replace('<strong>x</strong>', '**x**').replace('native:', 'legacy:'),
+        onParityMismatch: paritySpy,
+      }),
+    });
+
+    const html = await native.renderForPreview('body');
+    expect(html).toBe('<section>native:<strong>x</strong></section>');
+    expect(paritySpy).not.toHaveBeenCalled();
+  });
+
+  it('native pipeline should fallback to legacy when parityTransform throws and fallback is enabled', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const nativeRenderer = vi.fn().mockResolvedValue('<section>native</section>');
+    const legacy = { renderForPreview: vi.fn().mockResolvedValue('<section>legacy</section>') };
+    const native = new NativeRenderPipeline({
+      nativeRenderer,
+      legacyPipeline: legacy,
+      getFlags: () => ({
+        useNativePipeline: true,
+        enableLegacyFallback: true,
+        enforceNativeParity: true,
+        parityTransform: () => {
+          throw new Error('transform crashed');
+        },
+      }),
+    });
+
+    const html = await native.renderForPreview('body');
+    expect(html).toBe('<section>legacy</section>');
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('native pipeline should throw when parityTransform throws and fallback is disabled', async () => {
+    const nativeRenderer = vi.fn().mockResolvedValue('<section>native</section>');
+    const legacy = { renderForPreview: vi.fn().mockResolvedValue('<section>legacy</section>') };
+    const native = new NativeRenderPipeline({
+      nativeRenderer,
+      legacyPipeline: legacy,
+      getFlags: () => ({
+        useNativePipeline: true,
+        enableLegacyFallback: false,
+        enforceNativeParity: true,
+        parityTransform: () => {
+          throw new Error('transform crashed');
+        },
+      }),
+    });
+
+    await expect(native.renderForPreview('body')).rejects.toThrow('transform crashed');
+  });
+
+  it('native pipeline should pass detailed payload to onParityMismatch', async () => {
+    const paritySpy = vi.fn();
+    const nativeRenderer = vi.fn().mockResolvedValue('<section>native</section>');
+    const legacy = { renderForPreview: vi.fn().mockResolvedValue('<section>legacy</section>') };
+    const native = new NativeRenderPipeline({
+      nativeRenderer,
+      legacyPipeline: legacy,
+      getFlags: () => ({
+        useNativePipeline: true,
+        enableLegacyFallback: true,
+        enforceNativeParity: true,
+        onParityMismatch: paritySpy,
+      }),
+    });
+
+    await native.renderForPreview('# title', { sourcePath: 'docs/a.md' });
+    expect(paritySpy).toHaveBeenCalledTimes(1);
+
+    const payload = paritySpy.mock.calls[0][0];
+    expect(payload.context).toEqual({ sourcePath: 'docs/a.md' });
+    expect(payload.mismatch.index).toBeGreaterThanOrEqual(9);
+    expect(payload.mismatch.legacySnippet).toContain('legacy');
+    expect(payload.mismatch.candidateSnippet).toContain('native');
+  });
+
   it('createRenderPipelines should expose both pipeline instances', async () => {
     const convert = vi.fn().mockResolvedValue('<section>html</section>');
     const pipelines = createRenderPipelines({

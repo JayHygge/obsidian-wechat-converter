@@ -8,9 +8,56 @@ var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
 
+// services/parity-gate.js
+var require_parity_gate = __commonJS({
+  "services/parity-gate.js"(exports2, module2) {
+    function isStrictHtmlParity(legacyHtml, candidateHtml) {
+      return String(legacyHtml || "") === String(candidateHtml || "");
+    }
+    function findFirstDiffIndex(a, b) {
+      const left = String(a || "");
+      const right = String(b || "");
+      const minLength = Math.min(left.length, right.length);
+      for (let i = 0; i < minLength; i += 1) {
+        if (left[i] !== right[i])
+          return i;
+      }
+      if (left.length !== right.length)
+        return minLength;
+      return -1;
+    }
+    function buildParityMismatchDetails(legacyHtml, candidateHtml, contextLength = 80) {
+      const left = String(legacyHtml || "");
+      const right = String(candidateHtml || "");
+      const index = findFirstDiffIndex(left, right);
+      if (index === -1) {
+        return {
+          index: -1,
+          legacySnippet: "",
+          candidateSnippet: ""
+        };
+      }
+      const start = Math.max(0, index - contextLength);
+      const endLeft = Math.min(left.length, index + contextLength);
+      const endRight = Math.min(right.length, index + contextLength);
+      return {
+        index,
+        legacySnippet: left.slice(start, endLeft),
+        candidateSnippet: right.slice(start, endRight)
+      };
+    }
+    module2.exports = {
+      isStrictHtmlParity,
+      findFirstDiffIndex,
+      buildParityMismatchDetails
+    };
+  }
+});
+
 // services/render-pipeline.js
 var require_render_pipeline = __commonJS({
   "services/render-pipeline.js"(exports2, module2) {
+    var { isStrictHtmlParity, buildParityMismatchDetails } = require_parity_gate();
     var LegacyRenderPipeline = class {
       constructor(converter) {
         this.converter = converter;
@@ -39,6 +86,8 @@ var require_render_pipeline = __commonJS({
       }
       async renderForPreview(markdown, context = {}) {
         const flags = this.getFlags() || {};
+        const strictParity = flags.enforceNativeParity === true;
+        const parityTransform = typeof flags.parityTransform === "function" ? flags.parityTransform : null;
         if (typeof this.nativeRenderer !== "function") {
           if (flags.enableLegacyFallback !== false && this.legacyPipeline) {
             return this.legacyPipeline.renderForPreview(markdown, context);
@@ -46,7 +95,34 @@ var require_render_pipeline = __commonJS({
           throw new Error("Native render pipeline is not implemented yet");
         }
         try {
-          return await this.nativeRenderer(markdown, context);
+          const nativeHtml = await this.nativeRenderer(markdown, context);
+          if (!strictParity || !this.legacyPipeline) {
+            return nativeHtml;
+          }
+          const legacyHtml = await this.legacyPipeline.renderForPreview(markdown, context);
+          const parityLegacyHtml = parityTransform ? parityTransform(legacyHtml, { markdown, context, pipeline: "legacy" }) : legacyHtml;
+          const parityNativeHtml = parityTransform ? parityTransform(nativeHtml, { markdown, context, pipeline: "native" }) : nativeHtml;
+          if (isStrictHtmlParity(parityLegacyHtml, parityNativeHtml)) {
+            return nativeHtml;
+          }
+          const mismatch = buildParityMismatchDetails(parityLegacyHtml, parityNativeHtml);
+          const parityError = new Error(
+            `[RenderPipeline] Parity mismatch at index ${mismatch.index}`
+          );
+          parityError.code = "PARITY_MISMATCH";
+          parityError.parity = mismatch;
+          if (typeof flags.onParityMismatch === "function") {
+            flags.onParityMismatch({
+              markdown,
+              context,
+              mismatch
+            });
+          }
+          if (flags.enableLegacyFallback !== false && this.legacyPipeline) {
+            console.warn("[RenderPipeline] Native parity mismatch, fallback to legacy:", mismatch.index);
+            return legacyHtml;
+          }
+          throw parityError;
         } catch (error) {
           if (flags.enableLegacyFallback !== false && this.legacyPipeline) {
             console.warn("[RenderPipeline] Native render failed, fallback to legacy:", (error == null ? void 0 : error.message) || error);
@@ -977,6 +1053,8 @@ var DEFAULT_SETTINGS = {
   // 渲染管线开关（Phase 1: 兼容层实验）
   useNativePipeline: false,
   enableLegacyFallback: true,
+  enforceNativeParity: true,
+  // Phase 2: strict byte-level parity gate
   // 排版设置
   sidePadding: 16,
   // 页面两侧留白 (px)
@@ -2324,10 +2402,12 @@ var AppleStyleView = class extends ItemView {
     });
   }
   getRenderPipelineFlags() {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f;
     return {
       useNativePipeline: ((_b = (_a = this.plugin) == null ? void 0 : _a.settings) == null ? void 0 : _b.useNativePipeline) === true,
-      enableLegacyFallback: ((_d = (_c = this.plugin) == null ? void 0 : _c.settings) == null ? void 0 : _d.enableLegacyFallback) !== false
+      enableLegacyFallback: ((_d = (_c = this.plugin) == null ? void 0 : _c.settings) == null ? void 0 : _d.enableLegacyFallback) !== false,
+      enforceNativeParity: ((_f = (_e = this.plugin) == null ? void 0 : _e.settings) == null ? void 0 : _f.enforceNativeParity) !== false,
+      parityTransform: (html) => this.cleanHtmlForDraft(html)
     };
   }
   getActiveRenderPipeline() {
@@ -2763,6 +2843,14 @@ var AppleStyleSettingTab = class extends PluginSettingTab {
     new Setting(containerEl).setName("\u539F\u751F\u5931\u8D25\u65F6\u56DE\u9000 Legacy").setDesc("\u5EFA\u8BAE\u4FDD\u6301\u5F00\u542F\u3002\u539F\u751F\u7BA1\u7EBF\u5931\u8D25\u65F6\u81EA\u52A8\u4F7F\u7528\u73B0\u6709\u7A33\u5B9A\u6E32\u67D3\u94FE\u8DEF\uFF0C\u907F\u514D\u5F71\u54CD\u65E5\u5E38\u4F7F\u7528\u3002").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableLegacyFallback !== false).onChange(async (value) => {
       this.plugin.settings.enableLegacyFallback = value;
       await this.plugin.saveSettings();
+    }));
+    new Setting(containerEl).setName("\u96F6\u5DEE\u5F02\u95E8\u7981\uFF08Phase 2\uFF09").setDesc("\u5F00\u542F\u540E\u4F1A\u5C06\u5B9E\u9A8C\u6E32\u67D3\u8F93\u51FA\u4E0E Legacy \u8F93\u51FA\u8FDB\u884C\u5B57\u8282\u7EA7\u5BF9\u6BD4\uFF1B\u82E5\u4E0D\u4E00\u81F4\u5219\u81EA\u52A8\u56DE\u9000 Legacy\u3002\u5EFA\u8BAE\u4FDD\u6301\u5F00\u542F\u3002").addToggle((toggle) => toggle.setValue(this.plugin.settings.enforceNativeParity !== false).onChange(async (value) => {
+      this.plugin.settings.enforceNativeParity = value;
+      await this.plugin.saveSettings();
+      const converterView = this.plugin.getConverterView();
+      if (converterView) {
+        await converterView.convertCurrent(true);
+      }
     }));
     new Setting(containerEl).setName("\u53D1\u9001\u6210\u529F\u540E\u81EA\u52A8\u6E05\u7406\u8D44\u6E90").setDesc("\u9ED8\u8BA4\u5173\u95ED\u3002\u5F00\u542F\u540E\u4F1A\u5728\u521B\u5EFA\u8349\u7A3F\u6210\u529F\u540E\uFF0C\u5220\u9664\u4F60\u5728\u4E0B\u65B9\u914D\u7F6E\u7684\u76EE\u5F55\u3002").addToggle((toggle) => toggle.setValue(this.plugin.settings.cleanupAfterSync).onChange(async (value) => {
       this.plugin.settings.cleanupAfterSync = value;
