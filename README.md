@@ -60,8 +60,9 @@
       </tr>
     </table>
 
-4.  **🎨 三大专家级主题 (Premade Themes)**
-    - 内置 **简约 (Simple)**、**经典 (Classic)**、**优雅 (Elegant)** 三款精心设计的主题，覆盖从技术博客到人文随笔的各种场景。
+4.  **🎨 五大专家级主题 (Premade Themes)**
+    - 内置 **简约 (Simple)**、**经典 (Classic)**、**优雅 (Elegant)**、**水墨 (Ink Wash)**、**橙红 (Orange Red)** 五款精心设计的主题，覆盖从技术博客到人文随笔的各种场景。
+    - 主题预览：打开 [`docs/preview.html`](docs/preview.html) 查看所有主题的排版效果对比。
 
 5.  **🖼️ 强大的本地图片支持 (Local Image Support)**
     - **打破图床限制**：完美支持 Obsidian 的本地图片引用（包括 `![[Wiki Link]]` 和 `![]()`）。
