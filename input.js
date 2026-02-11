@@ -4,11 +4,13 @@ const { createRenderPipelines } = require('./services/render-pipeline');
 const { buildRenderRuntime } = require('./services/dependency-loader');
 const { resolveMarkdownSource } = require('./services/markdown-source');
 const { normalizeVaultPath, isAbsolutePathLike } = require('./services/path-utils');
-const { renderNativeMarkdown } = require('./services/native-renderer');
+const { renderObsidianTripletMarkdown } = require('./services/obsidian-triplet-renderer');
 const { createWechatSyncService } = require('./services/wechat-sync');
 const { resolveSyncAccount, toSyncFriendlyMessage } = require('./services/sync-context');
 const { processAllImages: processAllImagesService, processMathFormulas: processMathFormulasService } = require('./services/wechat-media');
 const { cleanHtmlForDraft: cleanHtmlForDraftService } = require('./services/wechat-html-cleaner');
+
+const TRIPLET_PARITY_DEBUG_REV = 'triplet-parity-r6';
 
 // 视图类型标识
 const APPLE_STYLE_VIEW = 'apple-style-converter';
@@ -33,10 +35,15 @@ const DEFAULT_SETTINGS = {
   proxyUrl: '',  // Cloudflare Worker 等代理地址
   // 预览设置
   usePhoneFrame: true, // 是否使用手机框预览
-  // 渲染管线开关（Phase 1: 兼容层实验）
+  // 三件套渲染开关
+  useTripletPipeline: false,
+  tripletFallbackToPhase2: true,
+  enforceTripletParity: true, // 严格零差异门禁
+  tripletParityVerboseLog: false, // 输出完整差异 payload 到控制台（调试用）
+  // 旧字段保留用于迁移检测
   useNativePipeline: false,
   enableLegacyFallback: true,
-  enforceNativeParity: true, // Phase 2: strict byte-level parity gate
+  enforceNativeParity: true,
   // 排版设置
   sidePadding: 16, // 页面两侧留白 (px)
   coloredHeader: false, // 标题是否使用主题色
@@ -398,8 +405,12 @@ class AppleStyleView extends ItemView {
     // 公式/SVG 上传缓存：Map<Hash, WechatURL>
     // 避免重复上传相同的公式，节省微信 API 调用额度 (Quota) 并提升速度
     this.svgUploadCache = new Map();
+    // 普通图片上传缓存：Map<accountId::src, wechatUrl>
+    // 用于同一视图生命周期内跨次同步复用，避免重复上传相同图片
+    this.imageUploadCache = new Map();
 
     this.renderGeneration = 0;
+    this.lastParityMismatchNoticeKey = '';
   }
 
   getViewType() {
@@ -674,12 +685,15 @@ class AppleStyleView extends ItemView {
       const { legacyPipeline, nativePipeline } = createRenderPipelines({
         converter: this.converter,
         getFlags: () => this.getRenderPipelineFlags(),
-        nativeRenderer: async (markdown, context = {}) =>
-          renderNativeMarkdown({
+        candidateRenderer: async (markdown, context = {}) => {
+          return renderObsidianTripletMarkdown({
+            app: this.app,
             converter: this.converter,
             markdown,
             sourcePath: context.sourcePath || '',
-          }),
+            component: this,
+          });
+        },
       });
       this.legacyRenderPipeline = legacyPipeline;
       this.nativeRenderPipeline = nativePipeline;
@@ -1552,13 +1566,16 @@ class AppleStyleView extends ItemView {
    * 处理 HTML 中的所有图片，上传到微信并替换链接
    * 支持并发上传 (Limit 3) 和进度回调
    */
-  async processAllImages(html, api, progressCallback) {
+  async processAllImages(html, api, progressCallback, cacheContext = {}) {
+    const accountId = cacheContext?.accountId || '';
     return processAllImagesService({
       html,
       api,
       progressCallback,
       pMap,
       srcToBlob: this.srcToBlob.bind(this),
+      imageUploadCache: this.imageUploadCache,
+      cacheNamespace: accountId,
     });
   }
 
@@ -1752,17 +1769,34 @@ class AppleStyleView extends ItemView {
   }
 
   getRenderPipelineFlags() {
+    const useTripletPipeline = this.plugin?.settings?.useTripletPipeline === true;
+    const tripletFallbackToPhase2 = this.plugin?.settings?.tripletFallbackToPhase2 !== false;
+    const enforceTripletParity = this.plugin?.settings?.enforceTripletParity !== false;
     return {
-      useNativePipeline: this.plugin?.settings?.useNativePipeline === true,
-      enableLegacyFallback: this.plugin?.settings?.enableLegacyFallback !== false,
-      enforceNativeParity: this.plugin?.settings?.enforceNativeParity !== false,
-      parityTransform: (html) => this.cleanHtmlForDraft(html),
+      useTripletPipeline,
+      tripletFallbackToPhase2,
+      enforceTripletParity,
+      // Backward-compatible aliases for existing tests and fallback paths.
+      useNativePipeline: useTripletPipeline,
+      enableLegacyFallback: tripletFallbackToPhase2,
+      enforceNativeParity: enforceTripletParity,
+      parityErrorCode: 'TRIPLET_PARITY_MISMATCH',
+      parityTransform: (html) => {
+        const cleaned = this.cleanHtmlForDraft(html);
+        // Normalize newline-only gaps between tags to avoid false-positive byte diffs.
+        return cleaned
+          .replace(/>\r?\n\s*</g, '><')
+          .replace(/\r?\n/g, '');
+      },
+      onParityMismatch: ({ context, mismatch }) => {
+        this.logParityMismatchDetails(context?.sourcePath || '', mismatch || {});
+      },
     };
   }
 
   getActiveRenderPipeline() {
     const flags = this.getRenderPipelineFlags();
-    if (flags.useNativePipeline && this.nativeRenderPipeline) {
+    if (flags.useTripletPipeline && this.nativeRenderPipeline) {
       return this.nativeRenderPipeline;
     }
     return this.legacyRenderPipeline;
@@ -1815,6 +1849,106 @@ class AppleStyleView extends ItemView {
     });
   }
 
+  showParityMismatchPlaceholder(sourcePath, mismatch = {}) {
+    this.currentHtml = null;
+    this.previewContainer.empty();
+    this.previewContainer.removeClass('apple-has-content');
+
+    const index = Number.isInteger(mismatch.index) ? mismatch.index : -1;
+    const segmentCount = Number.isInteger(mismatch.segmentCount) ? mismatch.segmentCount : 0;
+    const name = sourcePath ? String(sourcePath).split('/').pop() : '当前文档';
+    const box = this.previewContainer.createEl('div', { cls: 'apple-placeholder' });
+    box.createEl('div', { cls: 'apple-placeholder-icon', text: '⚠️' });
+    box.createEl('h2', { text: '三件套渲染未通过零差异门禁' });
+    box.createEl('p', {
+      text: `${name} 与 Phase2 基线输出存在差异（首个 index ${index}，共 ${segmentCount} 段差异）。`,
+    });
+    if (Array.isArray(mismatch.segments) && mismatch.segments.length > 0) {
+      const list = box.createEl('ul', { cls: 'apple-parity-list' });
+      mismatch.segments.slice(0, 3).forEach((seg, idx) => {
+        const segIndex = Number.isInteger(seg.index) ? seg.index : -1;
+        const lLine = Number.isInteger(seg.legacyLine) ? seg.legacyLine : -1;
+        const lCol = Number.isInteger(seg.legacyColumn) ? seg.legacyColumn : -1;
+        list.createEl('li', {
+          text: `#${idx + 1}: index ${segIndex}（legacy ${lLine}:${lCol}）`,
+        });
+      });
+    }
+    box.createEl('p', {
+      cls: 'apple-placeholder-note',
+      text: '建议开启“三件套失败时回退 Phase2”，或继续在当前模式下定位差异。'
+    });
+    this.updateCurrentDoc();
+  }
+
+  logParityMismatchDetails(sourcePath, mismatch = {}) {
+    const fileName = sourcePath ? String(sourcePath).split('/').pop() : '当前文档';
+    const index = Number.isInteger(mismatch.index) ? mismatch.index : -1;
+    const segmentCount = Number.isInteger(mismatch.segmentCount) ? mismatch.segmentCount : 0;
+    const lengthDelta = Number.isInteger(mismatch.lengthDelta) ? mismatch.lengthDelta : 0;
+    const legacyLength = Number.isInteger(mismatch.legacyLength) ? mismatch.legacyLength : -1;
+    const candidateLength = Number.isInteger(mismatch.candidateLength) ? mismatch.candidateLength : -1;
+    const verboseLog = this.plugin?.settings?.tripletParityVerboseLog === true;
+
+    console.groupCollapsed(
+      `[Triplet Parity] ${fileName} mismatch: index=${index}, segments=${segmentCount}, delta=${lengthDelta}`
+    );
+    console.warn('[Triplet Parity] summary', {
+      sourcePath,
+      index,
+      segmentCount,
+      lengthDelta,
+      legacyLength,
+      candidateLength,
+      truncated: mismatch.truncated === true,
+    });
+
+    if (Array.isArray(mismatch.segments) && mismatch.segments.length > 0) {
+      const maxPreview = 5;
+      mismatch.segments.slice(0, maxPreview).forEach((seg, idx) => {
+        const segIndex = Number.isInteger(seg.index) ? seg.index : -1;
+        const legacyLine = Number.isInteger(seg.legacyLine) ? seg.legacyLine : -1;
+        const legacyColumn = Number.isInteger(seg.legacyColumn) ? seg.legacyColumn : -1;
+        const candidateLine = Number.isInteger(seg.candidateLine) ? seg.candidateLine : -1;
+        const candidateColumn = Number.isInteger(seg.candidateColumn) ? seg.candidateColumn : -1;
+        console.warn(`[Triplet Parity] segment #${idx + 1}`, {
+          index: segIndex,
+          legacy: `${legacyLine}:${legacyColumn}`,
+          candidate: `${candidateLine}:${candidateColumn}`,
+          legacySnippet: seg.legacySnippet,
+          candidateSnippet: seg.candidateSnippet,
+        });
+      });
+      if (mismatch.segments.length > maxPreview) {
+        console.warn(`[Triplet Parity] ${mismatch.segments.length - maxPreview} more segments omitted from log preview`);
+      }
+    }
+    // Machine-consumable full payload for one-shot debugging and offline analysis.
+    const fullDetails = {
+      revision: TRIPLET_PARITY_DEBUG_REV,
+      sourcePath,
+      index,
+      segmentCount,
+      lengthDelta,
+      legacyLength,
+      candidateLength,
+      truncated: mismatch.truncated === true,
+      segments: Array.isArray(mismatch.segments) ? mismatch.segments : [],
+    };
+    if (typeof window !== 'undefined') {
+      window.__OWC_LAST_PARITY_DETAILS = fullDetails;
+      window.__OWC_TRIPLET_PARITY_REV = TRIPLET_PARITY_DEBUG_REV;
+    }
+    if (verboseLog) {
+      console.log('[Triplet Parity] full-details', fullDetails);
+    }
+    console.groupEnd();
+    // Emit once outside collapsed group so terminal-style log collectors can capture it.
+    if (verboseLog) {
+      console.error('[Triplet Parity] full-details-json', JSON.stringify(fullDetails));
+    }
+  }
+
 
   /**
    * 转换当前文档
@@ -1860,6 +1994,18 @@ class AppleStyleView extends ItemView {
 
     } catch (error) {
       console.error('转换失败:', error);
+      if (error && (error.code === 'TRIPLET_PARITY_MISMATCH' || error.code === 'PARITY_MISMATCH')) {
+        const index = Number.isInteger(error?.parity?.index) ? error.parity.index : -1;
+        const segmentCount = Number.isInteger(error?.parity?.segmentCount) ? error.parity.segmentCount : 0;
+        this.showParityMismatchPlaceholder(sourcePath, error.parity || {});
+
+        const noticeKey = `${sourcePath || ''}:${index}:${segmentCount}`;
+        if (!silent || this.lastParityMismatchNoticeKey !== noticeKey) {
+          new Notice(`⚠️ 三件套渲染与 Phase2 基线不一致（首个 index ${index}，共 ${segmentCount} 段）`);
+          this.lastParityMismatchNoticeKey = noticeKey;
+        }
+        return;
+      }
       if (!silent) new Notice('❌ 转换失败: ' + error.message);
     }
   }
@@ -2098,6 +2244,12 @@ class AppleStyleView extends ItemView {
     if (this.articleStates) {
       this.articleStates.clear();
     }
+    if (this.svgUploadCache) {
+      this.svgUploadCache.clear();
+    }
+    if (this.imageUploadCache) {
+      this.imageUploadCache.clear();
+    }
 
     console.log('🍎 转换器面板已关闭');
   }
@@ -2334,14 +2486,14 @@ class AppleStyleSettingTab extends PluginSettingTab {
       .setHeading();
 
     new Setting(containerEl)
-      .setName('使用实验渲染管线（Phase 1）')
-      .setDesc('当前阶段仍复用 Legacy Converter，并增加安全预处理/后处理；并非完整 Obsidian 原生三件套实现。开启后可能与 Legacy 有少量输出差异。')
+      .setName('启用 Obsidian 原生三件套渲染')
+      .setDesc('一次性启用 Source + Render + Export 三件套链路。关闭时使用当前稳定 Phase2 基线渲染。')
       .addToggle(toggle => toggle
-        .setValue(this.plugin.settings.useNativePipeline === true)
+        .setValue(this.plugin.settings.useTripletPipeline === true)
         .onChange(async (value) => {
-          this.plugin.settings.useNativePipeline = value;
+          this.plugin.settings.useTripletPipeline = value;
           await this.plugin.saveSettings();
-          new Notice(value ? '已启用实验渲染管线（Phase 1，可能有少量输出差异）' : '已切回 Legacy 渲染入口');
+          new Notice(value ? '已启用 Obsidian 原生三件套渲染' : '已切回 Phase2 基线渲染');
           const converterView = this.plugin.getConverterView();
           if (converterView) {
             await converterView.convertCurrent(true);
@@ -2349,27 +2501,37 @@ class AppleStyleSettingTab extends PluginSettingTab {
         }));
 
     new Setting(containerEl)
-      .setName('原生失败时回退 Legacy')
-      .setDesc('建议保持开启。原生管线失败时自动使用现有稳定渲染链路，避免影响日常使用。')
+      .setName('三件套失败时回退 Phase2')
+      .setDesc('建议保持开启。三件套渲染失败或未通过门禁时自动回退，确保日常可用性。')
       .addToggle(toggle => toggle
-        .setValue(this.plugin.settings.enableLegacyFallback !== false)
+        .setValue(this.plugin.settings.tripletFallbackToPhase2 !== false)
         .onChange(async (value) => {
-          this.plugin.settings.enableLegacyFallback = value;
+          this.plugin.settings.tripletFallbackToPhase2 = value;
           await this.plugin.saveSettings();
         }));
 
     new Setting(containerEl)
-      .setName('零差异门禁（Phase 2）')
-      .setDesc('开启后会将实验渲染输出与 Legacy 输出进行字节级对比；若不一致则自动回退 Legacy。建议保持开启。')
+      .setName('三件套零差异门禁')
+      .setDesc('开启后会将三件套输出与 Phase2 基线做字节级对比；不一致时按回退策略处理。建议保持开启。')
       .addToggle(toggle => toggle
-        .setValue(this.plugin.settings.enforceNativeParity !== false)
+        .setValue(this.plugin.settings.enforceTripletParity !== false)
         .onChange(async (value) => {
-          this.plugin.settings.enforceNativeParity = value;
+          this.plugin.settings.enforceTripletParity = value;
           await this.plugin.saveSettings();
           const converterView = this.plugin.getConverterView();
           if (converterView) {
             await converterView.convertCurrent(true);
           }
+        }));
+
+    new Setting(containerEl)
+      .setName('输出三件套完整差异日志（调试）')
+      .setDesc('默认关闭。开启后会把完整差异 payload 输出到控制台，日志体积会明显增大。')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.tripletParityVerboseLog === true)
+        .onChange(async (value) => {
+          this.plugin.settings.tripletParityVerboseLog = value;
+          await this.plugin.saveSettings();
         }));
 
     new Setting(containerEl)
@@ -2621,7 +2783,8 @@ class AppleStylePlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const loadedData = (await this.loadData()) || {};
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData);
     let didMigrate = false;
 
     // 数据迁移：将旧的单账号格式迁移到新的多账号格式
@@ -2662,6 +2825,36 @@ class AppleStylePlugin extends Plugin {
       delete this.settings.cleanupTarget;
       didMigrate = true;
     }
+
+    // 渲染开关迁移：旧 Native/Legacy 命名 -> Triplet/Phase2 命名
+    if (
+      !Object.prototype.hasOwnProperty.call(loadedData, 'useTripletPipeline') &&
+      Object.prototype.hasOwnProperty.call(loadedData, 'useNativePipeline')
+    ) {
+      this.settings.useTripletPipeline = loadedData.useNativePipeline === true;
+      didMigrate = true;
+    }
+
+    if (
+      !Object.prototype.hasOwnProperty.call(loadedData, 'tripletFallbackToPhase2') &&
+      Object.prototype.hasOwnProperty.call(loadedData, 'enableLegacyFallback')
+    ) {
+      this.settings.tripletFallbackToPhase2 = loadedData.enableLegacyFallback !== false;
+      didMigrate = true;
+    }
+
+    if (
+      !Object.prototype.hasOwnProperty.call(loadedData, 'enforceTripletParity') &&
+      Object.prototype.hasOwnProperty.call(loadedData, 'enforceNativeParity')
+    ) {
+      this.settings.enforceTripletParity = loadedData.enforceNativeParity !== false;
+      didMigrate = true;
+    }
+
+    // 维护双向兼容：新配置写回旧字段，保证老逻辑/测试在迁移期可继续工作
+    this.settings.useNativePipeline = this.settings.useTripletPipeline === true;
+    this.settings.enableLegacyFallback = this.settings.tripletFallbackToPhase2 !== false;
+    this.settings.enforceNativeParity = this.settings.enforceTripletParity !== false;
 
     if (didMigrate) {
       await this.saveSettings();

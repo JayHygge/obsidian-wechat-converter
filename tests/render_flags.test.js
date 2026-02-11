@@ -7,17 +7,22 @@ describe('Render Pipeline Flags', () => {
   it('should map explicit parity settings from plugin', () => {
     const plugin = new AppleStylePlugin();
     plugin.settings = {
-      useNativePipeline: true,
-      enableLegacyFallback: false,
-      enforceNativeParity: false,
+      useTripletPipeline: true,
+      tripletFallbackToPhase2: false,
+      enforceTripletParity: false,
     };
 
     const view = new AppleStyleView({}, plugin);
     const flags = view.getRenderPipelineFlags();
 
+    expect(flags.useTripletPipeline).toBe(true);
+    expect(flags.tripletFallbackToPhase2).toBe(false);
+    expect(flags.enforceTripletParity).toBe(false);
+    // Backward compatibility aliases
     expect(flags.useNativePipeline).toBe(true);
     expect(flags.enableLegacyFallback).toBe(false);
     expect(flags.enforceNativeParity).toBe(false);
+    expect(flags.parityErrorCode).toBe('TRIPLET_PARITY_MISMATCH');
     expect(typeof flags.parityTransform).toBe('function');
   });
 
@@ -28,8 +33,8 @@ describe('Render Pipeline Flags', () => {
     const view = new AppleStyleView({}, plugin);
     const flags = view.getRenderPipelineFlags();
 
-    expect(flags.useNativePipeline).toBe(false);
-    expect(flags.enableLegacyFallback).toBe(true);
-    expect(flags.enforceNativeParity).toBe(true);
+    expect(flags.useTripletPipeline).toBe(false);
+    expect(flags.tripletFallbackToPhase2).toBe(true);
+    expect(flags.enforceTripletParity).toBe(true);
   });
 });

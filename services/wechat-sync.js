@@ -37,6 +37,8 @@ function createWechatSyncService(deps) {
       if (onStatus) onStatus('images');
       let processedHtml = await processAllImages(currentHtml, api, (current, total) => {
         if (onImageProgress) onImageProgress(current, total);
+      }, {
+        accountId: account.id || '',
       });
 
       if (processedHtml.includes('mjx-container') || processedHtml.includes('<svg')) {

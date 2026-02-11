@@ -57,6 +57,38 @@ describe('Wechat Sync Service', () => {
     expect(result.cleanupResult).toEqual({ attempted: true, success: true });
   });
 
+  it('should pass accountId cache context into image processing', async () => {
+    const api = createMockApi();
+    const createApi = vi.fn(() => api);
+    const processAllImages = vi.fn(async () => '<p>x</p>');
+    const service = createWechatSyncService({
+      createApi,
+      srcToBlob: vi.fn(async () => new Blob(['cover'], { type: 'image/png' })),
+      processAllImages,
+      processMathFormulas: vi.fn(async () => '<p>x</p>'),
+      cleanHtmlForDraft: vi.fn((html) => html),
+      cleanupConfiguredDirectory: vi.fn(async () => ({ attempted: false })),
+      getFirstImageFromArticle: vi.fn(() => 'app://fallback-cover'),
+    });
+
+    await service.syncToDraft({
+      account: { id: 'acc-1', appId: 'wx1', appSecret: 'sec' },
+      proxyUrl: '',
+      currentHtml: '<p>x</p>',
+      activeFile: { basename: 'note-title' },
+      publishMeta: { coverSrc: null },
+      sessionCoverBase64: 'data:image/png;base64,abc',
+      sessionDigest: '',
+    });
+
+    expect(processAllImages).toHaveBeenCalledWith(
+      '<p>x</p>',
+      api,
+      expect.any(Function),
+      { accountId: 'acc-1' }
+    );
+  });
+
   it('should throw when no cover source is available', async () => {
     const service = createWechatSyncService({
       createApi: vi.fn(() => createMockApi()),

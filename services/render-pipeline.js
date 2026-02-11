@@ -1,5 +1,15 @@
 const { isStrictHtmlParity, buildParityMismatchDetails } = require('./parity-gate');
 
+function pickFlag(flags, primaryKey, legacyKey, defaultValue) {
+  if (Object.prototype.hasOwnProperty.call(flags || {}, primaryKey)) {
+    return flags[primaryKey];
+  }
+  if (Object.prototype.hasOwnProperty.call(flags || {}, legacyKey)) {
+    return flags[legacyKey];
+  }
+  return defaultValue;
+}
+
 class LegacyRenderPipeline {
   constructor(converter) {
     this.converter = converter;
@@ -26,24 +36,25 @@ class LegacyRenderPipeline {
 }
 
 class NativeRenderPipeline {
-  constructor({ nativeRenderer, legacyPipeline, getFlags }) {
-    this.nativeRenderer = nativeRenderer;
+  constructor({ nativeRenderer, candidateRenderer, legacyPipeline, getFlags }) {
+    this.nativeRenderer = candidateRenderer || nativeRenderer;
     this.legacyPipeline = legacyPipeline;
     this.getFlags = typeof getFlags === 'function' ? getFlags : () => ({});
   }
 
   async renderForPreview(markdown, context = {}) {
     const flags = this.getFlags() || {};
-    const strictParity = flags.enforceNativeParity === true;
+    const strictParity = pickFlag(flags, 'enforceTripletParity', 'enforceNativeParity', false) === true;
+    const enableFallback = pickFlag(flags, 'tripletFallbackToPhase2', 'enableLegacyFallback', true) !== false;
+    const mismatchCode = flags.parityErrorCode || 'PARITY_MISMATCH';
     const parityTransform = typeof flags.parityTransform === 'function' ? flags.parityTransform : null;
 
-    // Phase 1 behavior freeze: if native renderer is not implemented,
-    // fallback to legacy path by default.
+    // Candidate renderer is the new path (Triplet). Legacy pipeline is current Phase 2 baseline.
     if (typeof this.nativeRenderer !== 'function') {
-      if (flags.enableLegacyFallback !== false && this.legacyPipeline) {
+      if (enableFallback && this.legacyPipeline) {
         return this.legacyPipeline.renderForPreview(markdown, context);
       }
-      throw new Error('Native render pipeline is not implemented yet');
+      throw new Error('Triplet render pipeline is not implemented yet');
     }
 
     try {
@@ -67,9 +78,9 @@ class NativeRenderPipeline {
 
       const mismatch = buildParityMismatchDetails(parityLegacyHtml, parityNativeHtml);
       const parityError = new Error(
-        `[RenderPipeline] Parity mismatch at index ${mismatch.index}`
+        `[RenderPipeline] Parity mismatch at index ${mismatch.index} (segments ${mismatch.segmentCount}, delta ${mismatch.lengthDelta})`
       );
-      parityError.code = 'PARITY_MISMATCH';
+      parityError.code = mismatchCode;
       parityError.parity = mismatch;
 
       if (typeof flags.onParityMismatch === 'function') {
@@ -80,15 +91,15 @@ class NativeRenderPipeline {
         });
       }
 
-      if (flags.enableLegacyFallback !== false && this.legacyPipeline) {
-        console.warn('[RenderPipeline] Native parity mismatch, fallback to legacy:', mismatch.index);
+      if (enableFallback && this.legacyPipeline) {
+        console.warn('[RenderPipeline] Triplet parity mismatch, fallback to Phase2 baseline:', mismatch.index);
         return legacyHtml;
       }
 
       throw parityError;
     } catch (error) {
-      if (flags.enableLegacyFallback !== false && this.legacyPipeline) {
-        console.warn('[RenderPipeline] Native render failed, fallback to legacy:', error?.message || error);
+      if (enableFallback && this.legacyPipeline) {
+        console.warn('[RenderPipeline] Triplet render failed, fallback to Phase2 baseline:', error?.message || error);
         return this.legacyPipeline.renderForPreview(markdown, context);
       }
       throw error;
@@ -103,10 +114,11 @@ class NativeRenderPipeline {
   }
 }
 
-function createRenderPipelines({ converter, getFlags, nativeRenderer }) {
+function createRenderPipelines({ converter, getFlags, nativeRenderer, candidateRenderer }) {
   const legacyPipeline = new LegacyRenderPipeline(converter);
   const nativePipeline = new NativeRenderPipeline({
     nativeRenderer,
+    candidateRenderer,
     legacyPipeline,
     getFlags,
   });

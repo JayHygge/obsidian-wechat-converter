@@ -26,6 +26,117 @@ var require_parity_gate = __commonJS({
         return minLength;
       return -1;
     }
+    function indexToLineColumn(text, index) {
+      const source = String(text || "");
+      const safeIndex = Math.max(0, Math.min(source.length, index));
+      let line = 1;
+      let column = 1;
+      for (let i = 0; i < safeIndex; i += 1) {
+        if (source[i] === "\n") {
+          line += 1;
+          column = 1;
+        } else {
+          column += 1;
+        }
+      }
+      return { line, column };
+    }
+    function findSyncPoint(left, right, leftIndex, rightIndex, lookahead = 64) {
+      const maxLeftOffset = Math.min(lookahead, Math.max(0, left.length - leftIndex));
+      const maxRightOffset = Math.min(lookahead, Math.max(0, right.length - rightIndex));
+      for (let leftOffset = 0; leftOffset <= maxLeftOffset; leftOffset += 1) {
+        for (let rightOffset = 0; rightOffset <= maxRightOffset; rightOffset += 1) {
+          const lPos = leftIndex + leftOffset;
+          const rPos = rightIndex + rightOffset;
+          if (lPos >= left.length || rPos >= right.length)
+            continue;
+          if (left[lPos] !== right[rPos])
+            continue;
+          const lNext = lPos + 1;
+          const rNext = rPos + 1;
+          const nextLooksAligned = lNext >= left.length || rNext >= right.length || left[lNext] === right[rNext];
+          if (nextLooksAligned) {
+            return { leftIndex: lPos, rightIndex: rPos };
+          }
+        }
+      }
+      return null;
+    }
+    function collectMismatchSegments(left, right, options = {}) {
+      const lookahead = Number.isInteger(options.lookahead) ? options.lookahead : 64;
+      const maxSegments = Number.isInteger(options.maxSegments) && options.maxSegments > 0 ? options.maxSegments : Number.POSITIVE_INFINITY;
+      const snippetContext = Number.isInteger(options.snippetContext) ? options.snippetContext : 60;
+      let i = 0;
+      let j = 0;
+      let segmentCount = 0;
+      const segments = [];
+      while (i < left.length && j < right.length) {
+        if (left[i] === right[j]) {
+          i += 1;
+          j += 1;
+          continue;
+        }
+        const startLeft = i;
+        const startRight = j;
+        const sync = findSyncPoint(left, right, i, j, lookahead);
+        let endLeft = left.length;
+        let endRight = right.length;
+        if (sync) {
+          endLeft = sync.leftIndex;
+          endRight = sync.rightIndex;
+          i = sync.leftIndex;
+          j = sync.rightIndex;
+        } else {
+          i = left.length;
+          j = right.length;
+        }
+        const start = Math.max(0, Math.min(startLeft, startRight) - snippetContext);
+        const leftLineColumn = indexToLineColumn(left, startLeft);
+        const rightLineColumn = indexToLineColumn(right, startRight);
+        segmentCount += 1;
+        if (segments.length < maxSegments) {
+          segments.push({
+            index: startLeft,
+            legacyStart: startLeft,
+            legacyEnd: endLeft,
+            candidateStart: startRight,
+            candidateEnd: endRight,
+            legacyLine: leftLineColumn.line,
+            legacyColumn: leftLineColumn.column,
+            candidateLine: rightLineColumn.line,
+            candidateColumn: rightLineColumn.column,
+            legacySnippet: left.slice(start, Math.min(left.length, startLeft + snippetContext)),
+            candidateSnippet: right.slice(start, Math.min(right.length, startRight + snippetContext))
+          });
+        }
+      }
+      if (i < left.length || j < right.length) {
+        segmentCount += 1;
+        if (segments.length < maxSegments) {
+          const leftLineColumn = indexToLineColumn(left, i);
+          const rightLineColumn = indexToLineColumn(right, j);
+          const start = Math.max(0, Math.min(i, j) - snippetContext);
+          segments.push({
+            index: i,
+            legacyStart: i,
+            legacyEnd: left.length,
+            candidateStart: j,
+            candidateEnd: right.length,
+            legacyLine: leftLineColumn.line,
+            legacyColumn: leftLineColumn.column,
+            candidateLine: rightLineColumn.line,
+            candidateColumn: rightLineColumn.column,
+            legacySnippet: left.slice(start, Math.min(left.length, i + snippetContext)),
+            candidateSnippet: right.slice(start, Math.min(right.length, j + snippetContext))
+          });
+        }
+      }
+      return {
+        segmentCount,
+        segments,
+        truncated: Number.isFinite(maxSegments) ? segmentCount > segments.length : false
+      };
+    }
     function buildParityMismatchDetails(legacyHtml, candidateHtml, contextLength = 80) {
       const left = String(legacyHtml || "");
       const right = String(candidateHtml || "");
@@ -34,16 +145,35 @@ var require_parity_gate = __commonJS({
         return {
           index: -1,
           legacySnippet: "",
-          candidateSnippet: ""
+          candidateSnippet: "",
+          legacyLength: left.length,
+          candidateLength: right.length,
+          lengthDelta: 0,
+          segmentCount: 0,
+          segments: [],
+          truncated: false
         };
       }
       const start = Math.max(0, index - contextLength);
       const endLeft = Math.min(left.length, index + contextLength);
       const endRight = Math.min(right.length, index + contextLength);
+      const leftLineColumn = indexToLineColumn(left, index);
+      const rightLineColumn = indexToLineColumn(right, index);
+      const segmentData = collectMismatchSegments(left, right);
       return {
         index,
         legacySnippet: left.slice(start, endLeft),
-        candidateSnippet: right.slice(start, endRight)
+        candidateSnippet: right.slice(start, endRight),
+        legacyLength: left.length,
+        candidateLength: right.length,
+        lengthDelta: right.length - left.length,
+        legacyLine: leftLineColumn.line,
+        legacyColumn: leftLineColumn.column,
+        candidateLine: rightLineColumn.line,
+        candidateColumn: rightLineColumn.column,
+        segmentCount: segmentData.segmentCount,
+        segments: segmentData.segments,
+        truncated: segmentData.truncated
       };
     }
     module2.exports = {
@@ -58,6 +188,15 @@ var require_parity_gate = __commonJS({
 var require_render_pipeline = __commonJS({
   "services/render-pipeline.js"(exports2, module2) {
     var { isStrictHtmlParity, buildParityMismatchDetails } = require_parity_gate();
+    function pickFlag(flags, primaryKey, legacyKey, defaultValue) {
+      if (Object.prototype.hasOwnProperty.call(flags || {}, primaryKey)) {
+        return flags[primaryKey];
+      }
+      if (Object.prototype.hasOwnProperty.call(flags || {}, legacyKey)) {
+        return flags[legacyKey];
+      }
+      return defaultValue;
+    }
     var LegacyRenderPipeline = class {
       constructor(converter) {
         this.converter = converter;
@@ -79,20 +218,22 @@ var require_render_pipeline = __commonJS({
       }
     };
     var NativeRenderPipeline = class {
-      constructor({ nativeRenderer, legacyPipeline, getFlags }) {
-        this.nativeRenderer = nativeRenderer;
+      constructor({ nativeRenderer, candidateRenderer, legacyPipeline, getFlags }) {
+        this.nativeRenderer = candidateRenderer || nativeRenderer;
         this.legacyPipeline = legacyPipeline;
         this.getFlags = typeof getFlags === "function" ? getFlags : () => ({});
       }
       async renderForPreview(markdown, context = {}) {
         const flags = this.getFlags() || {};
-        const strictParity = flags.enforceNativeParity === true;
+        const strictParity = pickFlag(flags, "enforceTripletParity", "enforceNativeParity", false) === true;
+        const enableFallback = pickFlag(flags, "tripletFallbackToPhase2", "enableLegacyFallback", true) !== false;
+        const mismatchCode = flags.parityErrorCode || "PARITY_MISMATCH";
         const parityTransform = typeof flags.parityTransform === "function" ? flags.parityTransform : null;
         if (typeof this.nativeRenderer !== "function") {
-          if (flags.enableLegacyFallback !== false && this.legacyPipeline) {
+          if (enableFallback && this.legacyPipeline) {
             return this.legacyPipeline.renderForPreview(markdown, context);
           }
-          throw new Error("Native render pipeline is not implemented yet");
+          throw new Error("Triplet render pipeline is not implemented yet");
         }
         try {
           const nativeHtml = await this.nativeRenderer(markdown, context);
@@ -107,9 +248,9 @@ var require_render_pipeline = __commonJS({
           }
           const mismatch = buildParityMismatchDetails(parityLegacyHtml, parityNativeHtml);
           const parityError = new Error(
-            `[RenderPipeline] Parity mismatch at index ${mismatch.index}`
+            `[RenderPipeline] Parity mismatch at index ${mismatch.index} (segments ${mismatch.segmentCount}, delta ${mismatch.lengthDelta})`
           );
-          parityError.code = "PARITY_MISMATCH";
+          parityError.code = mismatchCode;
           parityError.parity = mismatch;
           if (typeof flags.onParityMismatch === "function") {
             flags.onParityMismatch({
@@ -118,14 +259,14 @@ var require_render_pipeline = __commonJS({
               mismatch
             });
           }
-          if (flags.enableLegacyFallback !== false && this.legacyPipeline) {
-            console.warn("[RenderPipeline] Native parity mismatch, fallback to legacy:", mismatch.index);
+          if (enableFallback && this.legacyPipeline) {
+            console.warn("[RenderPipeline] Triplet parity mismatch, fallback to Phase2 baseline:", mismatch.index);
             return legacyHtml;
           }
           throw parityError;
         } catch (error) {
-          if (flags.enableLegacyFallback !== false && this.legacyPipeline) {
-            console.warn("[RenderPipeline] Native render failed, fallback to legacy:", (error == null ? void 0 : error.message) || error);
+          if (enableFallback && this.legacyPipeline) {
+            console.warn("[RenderPipeline] Triplet render failed, fallback to Phase2 baseline:", (error == null ? void 0 : error.message) || error);
             return this.legacyPipeline.renderForPreview(markdown, context);
           }
           throw error;
@@ -138,10 +279,11 @@ var require_render_pipeline = __commonJS({
         };
       }
     };
-    function createRenderPipelines2({ converter, getFlags, nativeRenderer }) {
+    function createRenderPipelines2({ converter, getFlags, nativeRenderer, candidateRenderer }) {
       const legacyPipeline = new LegacyRenderPipeline(converter);
       const nativePipeline = new NativeRenderPipeline({
         nativeRenderer,
+        candidateRenderer,
         legacyPipeline,
         getFlags
       });
@@ -305,71 +447,1115 @@ var require_path_utils = __commonJS({
   }
 });
 
-// services/native-renderer.js
-var require_native_renderer = __commonJS({
-  "services/native-renderer.js"(exports2, module2) {
-    function isSafeRawImageSrc(src) {
-      if (!src || typeof src !== "string")
-        return false;
-      const trimmed = src.trim();
-      if (!trimmed || trimmed.startsWith("#"))
-        return false;
-      const safeProtocols = ["http:", "https:", "data:", "app:", "capacitor:", "obsidian:"];
-      try {
-        const parsed = new URL(trimmed);
-        return safeProtocols.includes(parsed.protocol);
-      } catch (error) {
-        return false;
+// services/obsidian-triplet-serializer.js
+var require_obsidian_triplet_serializer = __commonJS({
+  "services/obsidian-triplet-serializer.js"(exports2, module2) {
+    function appendInlineStyle(el, styleText) {
+      if (!el || !styleText)
+        return;
+      const existing = el.getAttribute("style") || "";
+      if (!existing) {
+        el.setAttribute("style", styleText);
+        return;
+      }
+      const normalized = existing.trim().endsWith(";") ? existing.trim() : `${existing.trim()};`;
+      el.setAttribute("style", `${normalized} ${styleText}`);
+    }
+    function setInlineStyleIfMissing(el, styleText) {
+      if (!el || !styleText)
+        return;
+      const existing = el.getAttribute("style");
+      if (existing && existing.trim())
+        return;
+      el.setAttribute("style", styleText);
+    }
+    var LEGACY_CALLOUT_ICON_BY_TYPE = {
+      note: "\u2139\uFE0F",
+      info: "\u2139\uFE0F",
+      todo: "\u2611\uFE0F",
+      abstract: "\u{1F4C4}",
+      summary: "\u{1F4C4}",
+      tldr: "\u{1F4C4}",
+      tip: "\u{1F4A1}",
+      hint: "\u{1F4A1}",
+      important: "\u{1F4A1}",
+      success: "\u2705",
+      check: "\u2705",
+      done: "\u2705",
+      question: "\u2753",
+      help: "\u2753",
+      faq: "\u2753",
+      warning: "\u26A0\uFE0F",
+      caution: "\u26A0\uFE0F",
+      attention: "\u26A0\uFE0F",
+      failure: "\u274C",
+      fail: "\u274C",
+      missing: "\u274C",
+      danger: "\u{1F6A8}",
+      error: "\u274C",
+      bug: "\u{1F41B}",
+      quote: "\u{1F4AC}",
+      cite: "\u{1F4DD}",
+      example: "\u{1F4CB}"
+    };
+    function toTitleCase(value) {
+      const text = String(value || "").trim();
+      if (!text)
+        return "";
+      return text.charAt(0).toUpperCase() + text.slice(1);
+    }
+    function resolveLegacyCalloutIcon(type) {
+      const key = String(type || "").trim().toLowerCase();
+      if (!key)
+        return "\u{1F4CC}";
+      return LEGACY_CALLOUT_ICON_BY_TYPE[key] || "\u{1F4CC}";
+    }
+    function convertObsidianCalloutsToLegacy(container, converter) {
+      if (!container || !converter)
+        return;
+      if (typeof converter.renderCalloutOpen !== "function")
+        return;
+      const callouts = Array.from(
+        container.querySelectorAll("div.callout,aside.callout,blockquote.callout,section.callout")
+      );
+      if (callouts.length === 0)
+        return;
+      const getCalloutDepth = (node) => {
+        let depth = 0;
+        let cursor = (node == null ? void 0 : node.parentElement) || null;
+        while (cursor) {
+          if (cursor.matches && cursor.matches("div.callout,aside.callout,blockquote.callout,section.callout")) {
+            depth += 1;
+          }
+          cursor = cursor.parentElement;
+        }
+        return depth;
+      };
+      callouts.sort((a, b) => {
+        const da = getCalloutDepth(a);
+        const db = getCalloutDepth(b);
+        return db - da;
+      });
+      for (const callout of callouts) {
+        if (!callout || !callout.parentNode)
+          continue;
+        const typeRaw = callout.getAttribute("data-callout") || callout.getAttribute("data-callout-type") || "";
+        const type = String(typeRaw || "").trim().toLowerCase();
+        const titleEl = callout.querySelector(":scope > .callout-title .callout-title-inner") || callout.querySelector(":scope > .callout-title-inner") || callout.querySelector(":scope > .callout-title");
+        const titleText = String((titleEl == null ? void 0 : titleEl.textContent) || "").trim();
+        const title = titleText || toTitleCase(type) || "Callout";
+        const contentEl = callout.querySelector(":scope > .callout-content") || callout.querySelector(":scope > .callout-body");
+        const contentHtml = contentEl ? contentEl.innerHTML : callout.innerHTML;
+        const calloutInfo = {
+          type: type || title.toLowerCase(),
+          title,
+          icon: resolveLegacyCalloutIcon(type || title),
+          label: type || title
+        };
+        let openHtml = "";
+        try {
+          openHtml = converter.renderCalloutOpen(calloutInfo);
+        } catch (error) {
+          continue;
+        }
+        if (!openHtml)
+          continue;
+        const host = document.createElement("div");
+        host.innerHTML = `${openHtml}${contentHtml}</section></section>`;
+        const replacementNodes = Array.from(host.childNodes);
+        if (replacementNodes.length === 0)
+          continue;
+        callout.replaceWith(...replacementNodes);
       }
     }
-    function preprocessMarkdownForNative(markdown) {
-      if (typeof markdown !== "string" || markdown.length === 0)
-        return "";
-      let output = markdown;
-      output = output.replace(/<(script|iframe|object|embed|form|input|button|style)\b[^>]*>[\s\S]*?<\/\1>/gi, "\n");
-      output = output.replace(/<(script|iframe|object|embed|form|input|button|style)\b[^>]*\/?>/gi, "\n");
-      output = output.replace(/<img\b[^>]*>/gi, (tag) => {
-        const hasEventHandler = /\son\w+\s*=/.test(tag);
-        const srcMatch = tag.match(/\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
-        const src = srcMatch ? srcMatch[1] || srcMatch[2] || srcMatch[3] || "" : "";
-        if (hasEventHandler || !isSafeRawImageSrc(src)) {
-          return "\n";
-        }
-        return tag;
-      });
-      return output;
+    function sanitizeClassList(el, tagName, finalStage = false) {
+      const className = el.getAttribute("class");
+      if (!className)
+        return;
+      const classes = className.split(/\s+/).filter(Boolean);
+      let keep = [];
+      if (tagName === "section") {
+        keep = classes.filter((cls) => cls === "code-snippet__fix");
+      } else if (tagName === "img") {
+        keep = classes.filter((cls) => cls === "math-formula-image");
+      } else if (!finalStage && (tagName === "pre" || tagName === "code")) {
+        keep = classes.filter((cls) => cls.startsWith("language-"));
+      }
+      if (keep.length > 0) {
+        el.setAttribute("class", keep.join(" "));
+      } else {
+        el.removeAttribute("class");
+      }
     }
-    function cleanupNativeRenderedHtml(html) {
-      if (typeof document === "undefined" || typeof html !== "string" || html.length === 0) {
+    function pruneObsidianOnlyAttributes(container, { finalStage = false } = {}) {
+      if (!container)
+        return;
+      const getAllowedAttrs = (tagName) => {
+        if (tagName === "a")
+          return /* @__PURE__ */ new Set(["href", "style"]);
+        if (tagName === "img")
+          return /* @__PURE__ */ new Set(["src", "alt", "style", "width", "height", "class"]);
+        if (tagName === "section")
+          return /* @__PURE__ */ new Set(["style", "class"]);
+        if (!finalStage && (tagName === "pre" || tagName === "code"))
+          return /* @__PURE__ */ new Set(["style", "class"]);
+        return /* @__PURE__ */ new Set(["style"]);
+      };
+      Array.from(container.querySelectorAll("*")).forEach((el) => {
+        const tagName = el.tagName.toLowerCase();
+        const allowed = getAllowedAttrs(tagName);
+        const attrs = Array.from(el.attributes);
+        for (const attr of attrs) {
+          const name = attr.name.toLowerCase();
+          if (name.startsWith("data-") || name === "id" || name === "dir") {
+            el.removeAttribute(attr.name);
+            continue;
+          }
+          if (!allowed.has(name)) {
+            el.removeAttribute(attr.name);
+          }
+        }
+        sanitizeClassList(el, tagName, finalStage);
+        const style = el.getAttribute("style");
+        if (style !== null && style.trim() === "") {
+          el.removeAttribute("style");
+        }
+      });
+    }
+    function normalizeLegacyTagAliases(container) {
+      if (!container)
+        return;
+      const strikeTags = Array.from(container.querySelectorAll("s"));
+      for (const sEl of strikeTags) {
+        const del = document.createElement("del");
+        if (sEl.hasAttributes()) {
+          Array.from(sEl.attributes).forEach((attr) => {
+            del.setAttribute(attr.name, attr.value);
+          });
+        }
+        del.innerHTML = sEl.innerHTML;
+        sEl.replaceWith(del);
+      }
+    }
+    function normalizeLegacyDeleteNesting(container) {
+      if (!container)
+        return;
+      const dels = Array.from(container.querySelectorAll("del"));
+      for (const first of dels) {
+        if (!first || !first.parentElement)
+          continue;
+        if (first.parentElement.tagName.toLowerCase() === "del")
+          continue;
+        if (first.querySelector("del"))
+          continue;
+        let spacer = first.nextSibling;
+        let second = null;
+        if (spacer && spacer.nodeType === Node.TEXT_NODE && /^\s*$/.test(spacer.textContent || "")) {
+          second = spacer.nextSibling;
+        } else if (spacer && spacer.nodeType === Node.ELEMENT_NODE && spacer.tagName.toLowerCase() === "del") {
+          second = spacer;
+          spacer = null;
+        } else {
+          continue;
+        }
+        if (!second || second.nodeType !== Node.ELEMENT_NODE || second.tagName.toLowerCase() !== "del")
+          continue;
+        const label = (first.textContent || "").trim();
+        if (!/[：:]$/.test(label))
+          continue;
+        if (!/\S/.test(second.textContent || ""))
+          continue;
+        if (!/\s$/.test(first.textContent || "")) {
+          first.appendChild(document.createTextNode(" "));
+        }
+        first.appendChild(second);
+        if (spacer && spacer.parentNode)
+          spacer.remove();
+      }
+    }
+    function normalizeLegacyDeleteNestingInHtml(html) {
+      if (typeof html !== "string" || html.length === 0)
         return html;
+      return html.replace(
+        /<del([^>]*)>([^<]*[：:])<\/del>(?:\s|&nbsp;|<br\s*\/?>)*<del([^>]*)>/g,
+        (_match, attrs1, label, attrs2) => `<del${attrs1}>${label} <del${attrs2}>`
+      );
+    }
+    function getTagStyle(converter, tagName) {
+      if (!converter || typeof converter.getInlineStyle !== "function")
+        return "";
+      try {
+        return converter.getInlineStyle(tagName) || "";
+      } catch (error) {
+        return "";
+      }
+    }
+    function safeDecodeCaption(text) {
+      if (!text || typeof text !== "string")
+        return text || "";
+      if (!text.includes("%"))
+        return text;
+      try {
+        return decodeURIComponent(text);
+      } catch (error) {
+        return text;
+      }
+    }
+    function deriveImageCaption(converter, src = "", alt = "") {
+      let caption = alt || "";
+      if (!caption) {
+        if (converter && typeof converter.extractFileName === "function") {
+          caption = converter.extractFileName(src);
+        } else {
+          caption = src.split("/").pop() || "\u56FE\u7247";
+        }
+      }
+      caption = safeDecodeCaption(caption);
+      caption = caption.replace(/[?#].*$/, "");
+      caption = caption.replace(/\|\s*\d+(x\d+)?\s*$/, "");
+      caption = caption.replace(/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i, "");
+      return caption || "\u56FE\u7247";
+    }
+    function extractWidthHintFromText(text) {
+      const value = String(text || "");
+      if (!value)
+        return "";
+      const wikiMatch = value.match(/\|(\d{2,4})(?:x\d+)?(?:\]\]|$)/i);
+      if (wikiMatch && wikiMatch[1])
+        return wikiMatch[1];
+      const styleMatch = value.match(/\b(?:max-)?width\s*[:=]\s*(\d{2,4})\s*px\b/i);
+      if (styleMatch && styleMatch[1])
+        return styleMatch[1];
+      const bareMatch = value.match(/^\s*(\d{2,4})\s*$/);
+      if (bareMatch && bareMatch[1])
+        return bareMatch[1];
+      return "";
+    }
+    function findImageWidthHintFromAncestors(el) {
+      let cursor = el;
+      let depth = 0;
+      while (cursor && depth < 6) {
+        if (cursor.nodeType === Node.ELEMENT_NODE) {
+          const attrs = ["width", "data-width", "data-size", "data-image-width", "style", "src", "data-src", "data-href", "title", "aria-label", "alt"];
+          for (const key of attrs) {
+            const value = cursor.getAttribute(key);
+            const width = extractWidthHintFromText(value);
+            if (width)
+              return width;
+          }
+          const textWidth = extractWidthHintFromText(cursor.textContent || "");
+          if (textWidth)
+            return textWidth;
+        }
+        cursor = cursor.parentElement;
+        depth += 1;
+      }
+      return "";
+    }
+    function findLegacyAltHintFromAncestors(el, rawAlt = "") {
+      const baseAlt = String(rawAlt || "").trim();
+      if (!baseAlt)
+        return "";
+      let cursor = el;
+      let depth = 0;
+      while (cursor && depth < 6) {
+        if (cursor.nodeType === Node.ELEMENT_NODE) {
+          const attrs = ["alt", "title", "aria-label", "data-alt", "data-caption"];
+          for (const key of attrs) {
+            const value = String(cursor.getAttribute(key) || "").trim();
+            if (!value)
+              continue;
+            if (value === baseAlt)
+              continue;
+            if (value.startsWith(`${baseAlt}|`) && /\|\d{2,4}(x\d+)?\s*$/i.test(value)) {
+              return value;
+            }
+          }
+        }
+        cursor = cursor.parentElement;
+        depth += 1;
+      }
+      return "";
+    }
+    function buildLegacyParityImageAlt(imgEl, rawAlt = "") {
+      var _a, _b;
+      const alt = String(rawAlt || "");
+      if (!alt)
+        return alt;
+      if (/\|\s*\d+(x\d+)?\s*$/.test(alt))
+        return alt;
+      const ancestorAltHint = findLegacyAltHintFromAncestors(imgEl, alt);
+      if (ancestorAltHint) {
+        return ancestorAltHint;
+      }
+      const widthAttr = String(((_a = imgEl == null ? void 0 : imgEl.getAttribute) == null ? void 0 : _a.call(imgEl, "width")) || "").trim();
+      if (/^\d+$/.test(widthAttr)) {
+        return `${alt}|${widthAttr}`;
+      }
+      const style = String(((_b = imgEl == null ? void 0 : imgEl.getAttribute) == null ? void 0 : _b.call(imgEl, "style")) || "");
+      const styleMatch = style.match(/(?:^|;)\s*width\s*:\s*(\d+)px\b/i);
+      if (styleMatch && styleMatch[1]) {
+        return `${alt}|${styleMatch[1]}`;
+      }
+      const ancestorWidth = findImageWidthHintFromAncestors(imgEl);
+      if (ancestorWidth) {
+        return `${alt}|${ancestorWidth}`;
+      }
+      return alt;
+    }
+    function sanitizeAnchorAndImageLinks(container, converter) {
+      if (!container)
+        return;
+      const hasExplicitProtocol = (value) => /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(String(value || ""));
+      const canonicalizeRelativeHrefForLegacyParity = (href) => {
+        const value = String(href || "").trim();
+        if (!value)
+          return value;
+        if (value.startsWith("#") || value.startsWith("//"))
+          return value;
+        if (hasExplicitProtocol(value))
+          return value;
+        let decoded = value;
+        try {
+          decoded = decodeURI(value);
+        } catch (error) {
+        }
+        return encodeURI(decoded);
+      };
+      container.querySelectorAll("a[href]").forEach((a) => {
+        const href = a.getAttribute("href") || "";
+        const safeHref = converter && typeof converter.validateLink === "function" ? converter.validateLink(href, false) : href;
+        a.setAttribute("href", canonicalizeRelativeHrefForLegacyParity(safeHref));
+      });
+    }
+    function extractImageEmbedSrc(embedEl) {
+      if (!embedEl)
+        return "";
+      const attrKeys = ["src", "data-src", "data-href", "href"];
+      for (const key of attrKeys) {
+        const val = embedEl.getAttribute(key);
+        if (val && String(val).trim())
+          return String(val).trim();
+      }
+      const text = String(embedEl.textContent || "").trim();
+      const wikiMatch = text.match(/^!\[\[([^\]|]+)(?:\|[^\]]+)?\]\]$/);
+      if (wikiMatch && wikiMatch[1])
+        return String(wikiMatch[1]).trim();
+      return "";
+    }
+    function looksLikeImageSrc(src) {
+      const value = String(src || "").trim();
+      if (!value)
+        return false;
+      if (/^(data:image\/|app:\/\/|capacitor:\/\/|https?:\/\/)/i.test(value))
+        return true;
+      return /\.(png|jpe?g|gif|webp|svg|bmp|avif)(\?|#|$)/i.test(value);
+    }
+    function materializeImageEmbedPlaceholders(container, converter) {
+      if (!container)
+        return;
+      const embeds = Array.from(container.querySelectorAll("span.internal-embed,span.image-embed,div.internal-embed,div.image-embed"));
+      for (const embed of embeds) {
+        const hasImg = !!embed.querySelector("img");
+        if (hasImg)
+          continue;
+        const src = extractImageEmbedSrc(embed);
+        const forceAsImage = embed.classList.contains("image-embed");
+        if (!src || !forceAsImage && !looksLikeImageSrc(src))
+          continue;
+        let resolvedSrc = normalizeObsidianImageSrcForLegacyParity(src);
+        if (converter && typeof converter.resolveImagePath === "function") {
+          resolvedSrc = converter.resolveImagePath(resolvedSrc);
+        }
+        const img = document.createElement("img");
+        img.setAttribute("src", resolvedSrc);
+        const alt = embed.getAttribute("alt") || "";
+        if (alt)
+          img.setAttribute("alt", alt);
+        const widthHint = findImageWidthHintFromAncestors(embed);
+        if (widthHint) {
+          img.setAttribute("width", widthHint);
+        }
+        embed.replaceWith(img);
+      }
+    }
+    function promoteImageEmbedAltHints(container) {
+      if (!container)
+        return;
+      const embeds = Array.from(container.querySelectorAll("span.image-embed,div.image-embed,span.internal-embed,div.internal-embed"));
+      for (const embed of embeds) {
+        const img = embed.querySelector("img");
+        if (!img)
+          continue;
+        const embedAlt = String(embed.getAttribute("alt") || "").trim();
+        const imgAlt = String(img.getAttribute("alt") || "").trim();
+        const hasSizedAlt = /\|\s*\d+(x\d+)?\s*$/i.test(embedAlt);
+        if (hasSizedAlt) {
+          if (!imgAlt || embedAlt.startsWith(`${imgAlt}|`)) {
+            img.setAttribute("alt", embedAlt);
+          }
+        }
+        const widthHint = findImageWidthHintFromAncestors(embed);
+        if (widthHint && !img.getAttribute("width")) {
+          img.setAttribute("width", widthHint);
+        }
+      }
+    }
+    function normalizeObsidianImageSrcForLegacyParity(src) {
+      const value = String(src || "").trim();
+      if (!value)
+        return value;
+      if (/^app:\/\/obsidian\.md\//i.test(value)) {
+        try {
+          const parsed = new URL(value);
+          const pathname = decodeURIComponent((parsed.pathname || "").replace(/^\/+/, ""));
+          return pathname || value;
+        } catch (error) {
+          return value.replace(/^app:\/\/obsidian\.md\/+/i, "");
+        }
+      }
+      return value;
+    }
+    function convertPreBlocks(container, converter) {
+      if (!container || !converter || typeof converter.createCodeBlock !== "function")
+        return;
+      const preBlocks = Array.from(container.querySelectorAll("pre"));
+      for (const pre of preBlocks) {
+        if (pre.closest(".code-snippet__fix"))
+          continue;
+        const codeEl = pre.querySelector("code");
+        const className = `${pre.className || ""} ${(codeEl == null ? void 0 : codeEl.className) || ""}`;
+        const langMatch = className.match(/language-([\w-]+)/);
+        const lang = langMatch ? langMatch[1] : "text";
+        const content = codeEl ? codeEl.textContent || "" : pre.textContent || "";
+        const wrapper = document.createElement("div");
+        wrapper.innerHTML = converter.createCodeBlock(content, lang);
+        const replacement = wrapper.firstElementChild;
+        if (replacement) {
+          pre.replaceWith(replacement);
+        }
+      }
+    }
+    function convertStandaloneImages(container, converter) {
+      if (!container)
+        return;
+      const imgs = Array.from(container.querySelectorAll("img"));
+      for (const img of imgs) {
+        if (img.closest("figure"))
+          continue;
+        if (img.getAttribute("alt") === "logo")
+          continue;
+        if (img.classList.contains("math-formula-image"))
+          continue;
+        let src = img.getAttribute("src") || "";
+        src = normalizeObsidianImageSrcForLegacyParity(src);
+        const safeSrc = converter && typeof converter.validateLink === "function" ? converter.validateLink(src, true) : src;
+        src = safeSrc;
+        if (!looksLikeImageSrc(src)) {
+          img.setAttribute("src", safeSrc);
+          img.setAttribute("data-owc-skip-style", "1");
+          continue;
+        }
+        if (converter && typeof converter.resolveImagePath === "function") {
+          src = converter.resolveImagePath(src);
+        }
+        const rawAlt = img.getAttribute("alt") || "";
+        const alt = buildLegacyParityImageAlt(img, rawAlt);
+        const caption = deriveImageCaption(converter, src, alt);
+        const figure = document.createElement("figure");
+        if (converter && converter.avatarUrl) {
+          let figureStyle = getTagStyle(converter, "figure");
+          figureStyle = figureStyle.replace("text-align: center;", "text-align: left;");
+          appendInlineStyle(figure, figureStyle);
+          const header = document.createElement("div");
+          appendInlineStyle(header, getTagStyle(converter, "avatar-header"));
+          const avatar = document.createElement("img");
+          avatar.setAttribute("src", converter.avatarUrl);
+          avatar.setAttribute("alt", "logo");
+          appendInlineStyle(avatar, getTagStyle(converter, "avatar"));
+          const captionEl = document.createElement("span");
+          appendInlineStyle(captionEl, getTagStyle(converter, "avatar-caption"));
+          captionEl.textContent = caption;
+          header.appendChild(avatar);
+          header.appendChild(captionEl);
+          const spacer = document.createElement("section");
+          spacer.setAttribute("style", "display:block;height:8px;line-height:8px;font-size:0;");
+          spacer.innerHTML = "&nbsp;";
+          const bodyImg2 = document.createElement("img");
+          bodyImg2.setAttribute("src", src);
+          bodyImg2.setAttribute("alt", alt);
+          appendInlineStyle(bodyImg2, getTagStyle(converter, "img"));
+          figure.appendChild(header);
+          figure.appendChild(spacer);
+          figure.appendChild(bodyImg2);
+          img.replaceWith(figure);
+          continue;
+        }
+        figure.setAttribute("style", "display:block;margin:16px 0;text-align:center;");
+        const bodyImg = document.createElement("img");
+        bodyImg.setAttribute("src", src);
+        bodyImg.setAttribute("alt", alt);
+        appendInlineStyle(bodyImg, getTagStyle(converter, "img"));
+        figure.appendChild(bodyImg);
+        const showCaption = !converter || converter.showImageCaption !== false;
+        if (showCaption) {
+          const figcaption = document.createElement("figcaption");
+          appendInlineStyle(figcaption, getTagStyle(converter, "figcaption"));
+          figcaption.textContent = caption;
+          figure.appendChild(figcaption);
+        }
+        img.replaceWith(figure);
+      }
+    }
+    function trimTrailingWhitespaceInBlockText(container) {
+      if (!container)
+        return;
+      const selector = "p,li,blockquote,h1,h2,h3,h4,h5,h6,figcaption,td,th";
+      const blocks = Array.from(container.querySelectorAll(selector));
+      for (const block of blocks) {
+        let node = block.lastChild;
+        while (node) {
+          if (node.nodeType === Node.TEXT_NODE) {
+            const original = String(node.textContent || "");
+            const trimmed = original.replace(/[ \t\u00a0]+$/g, "");
+            if (trimmed !== original) {
+              if (trimmed) {
+                node.textContent = trimmed;
+                break;
+              }
+              const prev = node.previousSibling;
+              node.remove();
+              node = prev;
+              continue;
+            }
+          }
+          break;
+        }
+      }
+    }
+    function trimLeadingWhitespaceInBlockText(container) {
+      if (!container)
+        return;
+      const selector = "p,li,blockquote,h1,h2,h3,h4,h5,h6,figcaption,td,th";
+      const blocks = Array.from(container.querySelectorAll(selector));
+      for (const block of blocks) {
+        let node = block.firstChild;
+        while (node) {
+          if (node.nodeType === Node.TEXT_NODE) {
+            const original = String(node.textContent || "");
+            const trimmed = original.replace(/^[ \t\u00a0]+/g, "");
+            if (trimmed !== original) {
+              if (trimmed) {
+                node.textContent = trimmed;
+                break;
+              }
+              const next = node.nextSibling;
+              node.remove();
+              node = next;
+              continue;
+            }
+          }
+          break;
+        }
+      }
+    }
+    function applyThemeInlineStyles(container, converter) {
+      if (!container || !converter)
+        return;
+      const styledTags = [
+        "p",
+        "blockquote",
+        "pre",
+        "code",
+        "ul",
+        "ol",
+        "li",
+        "figure",
+        "figcaption",
+        "img",
+        "a",
+        "table",
+        "thead",
+        "th",
+        "td",
+        "hr",
+        "strong",
+        "em",
+        "del",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6"
+      ];
+      for (const tag of styledTags) {
+        const styleText = getTagStyle(converter, tag);
+        if (!styleText)
+          continue;
+        container.querySelectorAll(tag).forEach((el) => {
+          if (tag === "img" && el.getAttribute("data-owc-skip-style") === "1") {
+            return;
+          }
+          setInlineStyleIfMissing(el, styleText);
+        });
+      }
+      const liPStyle = getTagStyle(converter, "li p");
+      if (liPStyle) {
+        container.querySelectorAll("li > p").forEach((p) => setInlineStyleIfMissing(p, liPStyle));
+      }
+    }
+    function stripDangerousTags(container) {
+      if (!container)
+        return;
+      container.querySelectorAll("script,iframe,object,embed,form,input,button,style").forEach((el) => el.remove());
+    }
+    function applyLegacyTypographerParity(container, converter) {
+      if (!container || !converter || !converter.md)
+        return;
+      if (typeof converter.md.renderInline !== "function")
+        return;
+      if (converter.md.options && converter.md.options.typographer !== true)
+        return;
+      if (typeof document === "undefined")
+        return;
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+      const decodeHost = document.createElement("div");
+      const interestingPattern = /["']|\.{3}|---?|\+-|\((?:c|r|tm)\)/i;
+      let node = walker.nextNode();
+      while (node) {
+        const current = node;
+        node = walker.nextNode();
+        const parent = current.parentElement;
+        if (!parent)
+          continue;
+        if (parent.closest("pre,code,kbd,samp,script,style,textarea,svg,mjx-container,mjx-math,math"))
+          continue;
+        const original = String(current.textContent || "");
+        if (!original || !interestingPattern.test(original))
+          continue;
+        let rendered = "";
+        try {
+          rendered = converter.md.renderInline(original);
+        } catch (error) {
+          continue;
+        }
+        if (!rendered || rendered === original)
+          continue;
+        decodeHost.innerHTML = rendered;
+        const normalized = String(decodeHost.textContent || "");
+        if (normalized && normalized !== original) {
+          current.textContent = normalized;
+        }
+      }
+    }
+    function applyLegacyLinkifyParity(container, converter) {
+      if (!container || !converter || !converter.md || !converter.md.linkify)
+        return;
+      if (typeof converter.md.linkify.match !== "function")
+        return;
+      if (typeof document === "undefined")
+        return;
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      while (node) {
+        const current = node;
+        node = walker.nextNode();
+        const parent = current.parentElement;
+        if (!parent)
+          continue;
+        if (parent.closest("a,pre,code,kbd,samp,script,style,textarea,svg,mjx-container,mjx-math,math"))
+          continue;
+        const original = String(current.textContent || "");
+        if (!original || !original.includes("."))
+          continue;
+        let matches = null;
+        try {
+          matches = converter.md.linkify.match(original);
+        } catch (error) {
+          matches = null;
+        }
+        if (!Array.isArray(matches) || matches.length === 0)
+          continue;
+        const fragment = document.createDocumentFragment();
+        let cursor = 0;
+        for (const item of matches) {
+          const start = Number.isFinite(item == null ? void 0 : item.index) ? item.index : -1;
+          const end = Number.isFinite(item == null ? void 0 : item.lastIndex) ? item.lastIndex : -1;
+          if (start < 0 || end <= start || start < cursor || end > original.length)
+            continue;
+          if (start > cursor) {
+            fragment.appendChild(document.createTextNode(original.slice(cursor, start)));
+          }
+          const displayText = original.slice(start, end);
+          const hrefCandidate = String((item == null ? void 0 : item.url) || (item == null ? void 0 : item.text) || displayText || "").trim();
+          const href = converter && typeof converter.validateLink === "function" ? converter.validateLink(hrefCandidate, false) : hrefCandidate;
+          const a = document.createElement("a");
+          a.setAttribute("href", href);
+          a.textContent = displayText;
+          fragment.appendChild(a);
+          cursor = end;
+        }
+        if (cursor === 0)
+          continue;
+        if (cursor < original.length) {
+          fragment.appendChild(document.createTextNode(original.slice(cursor)));
+        }
+        current.replaceWith(fragment);
+      }
+    }
+    function serializeObsidianRenderedHtml({ root, converter }) {
+      if (typeof document === "undefined") {
+        throw new Error("Triplet serializer requires DOM environment");
       }
       const container = document.createElement("div");
-      container.innerHTML = html;
-      Array.from(container.querySelectorAll("img")).forEach((img) => {
-        const inFigure = !!img.closest("figure");
-        const isMathImage = img.classList.contains("math-formula-image");
-        if (!inFigure && !isMathImage) {
-          img.remove();
-        }
-      });
-      return container.innerHTML;
-    }
-    async function renderNativeMarkdown2({ converter, markdown, sourcePath = "" }) {
-      if (!converter || typeof converter.convert !== "function") {
-        throw new Error("Native converter is not ready");
+      container.innerHTML = root ? root.innerHTML : "";
+      materializeImageEmbedPlaceholders(container, converter);
+      promoteImageEmbedAltHints(container);
+      convertObsidianCalloutsToLegacy(container, converter);
+      pruneObsidianOnlyAttributes(container, { finalStage: false });
+      normalizeLegacyTagAliases(container);
+      normalizeLegacyDeleteNesting(container);
+      stripDangerousTags(container);
+      applyLegacyLinkifyParity(container, converter);
+      applyLegacyTypographerParity(container, converter);
+      sanitizeAnchorAndImageLinks(container, converter);
+      convertPreBlocks(container, converter);
+      convertStandaloneImages(container, converter);
+      applyThemeInlineStyles(container, converter);
+      pruneObsidianOnlyAttributes(container, { finalStage: true });
+      trimLeadingWhitespaceInBlockText(container);
+      trimTrailingWhitespaceInBlockText(container);
+      let html = container.innerHTML;
+      if (converter && typeof converter.fixListParagraphs === "function") {
+        html = converter.fixListParagraphs(html);
       }
-      if (typeof converter.updateSourcePath === "function") {
-        converter.updateSourcePath(sourcePath);
+      if (converter && typeof converter.unwrapFigures === "function") {
+        html = converter.unwrapFigures(html);
       }
-      const preprocessed = preprocessMarkdownForNative(markdown);
-      const html = await converter.convert(preprocessed);
-      return cleanupNativeRenderedHtml(html);
+      if (converter && typeof converter.removeBlockquoteParagraphMargins === "function") {
+        html = converter.removeBlockquoteParagraphMargins(html);
+      }
+      if (converter && typeof converter.fixMathJaxTags === "function") {
+        html = converter.fixMathJaxTags(html);
+      }
+      if (converter && typeof converter.sanitizeHtml === "function") {
+        html = converter.sanitizeHtml(html);
+      }
+      html = normalizeLegacyDeleteNestingInHtml(html);
+      const sectionStyle = getTagStyle(converter, "section");
+      return `<section style="${sectionStyle}">${html}</section>`;
     }
     module2.exports = {
-      isSafeRawImageSrc,
-      preprocessMarkdownForNative,
-      cleanupNativeRenderedHtml,
-      renderNativeMarkdown: renderNativeMarkdown2
+      serializeObsidianRenderedHtml,
+      deriveImageCaption,
+      safeDecodeCaption
+    };
+  }
+});
+
+// services/obsidian-triplet-renderer.js
+var require_obsidian_triplet_renderer = __commonJS({
+  "services/obsidian-triplet-renderer.js"(exports2, module2) {
+    var { MarkdownRenderer } = require("obsidian");
+    var { serializeObsidianRenderedHtml } = require_obsidian_triplet_serializer();
+    function containsLegacyIncompatibleMathMarkup(html) {
+      const value = String(html || "");
+      return /<mjx-(?:math|container)\b/i.test(value);
+    }
+    function isFencedBlockDelimiter(line) {
+      return /^\s{0,3}(?:`{3,}|~{3,})/.test(String(line || ""));
+    }
+    function parseFencedBlockDelimiter(line) {
+      const value = String(line || "");
+      const match = value.match(/^\s{0,3}((`{3,})|(~{3,}))(.*)$/);
+      if (!match)
+        return null;
+      const markerRun = match[1] || "";
+      const markerChar = markerRun.charAt(0);
+      if (markerChar !== "`" && markerChar !== "~")
+        return null;
+      return {
+        marker: markerChar,
+        length: markerRun.length
+      };
+    }
+    function isMathFenceDelimiter(line) {
+      return /^\s*\$\$\s*$/.test(String(line || ""));
+    }
+    function isQuoteLine(line) {
+      return /^\s{0,3}(?:>\s?)+/.test(String(line || ""));
+    }
+    function stripQuotePrefix(line) {
+      return String(line || "").replace(/^\s{0,3}(?:>\s?)+/, "");
+    }
+    function startsNewBlock(trimmedLine) {
+      if (!trimmedLine)
+        return true;
+      if (/^#{1,6}\s/.test(trimmedLine))
+        return true;
+      if (/^>/.test(trimmedLine))
+        return true;
+      if (/^([-*_])(?:\s*\1){2,}\s*$/.test(trimmedLine))
+        return true;
+      if (/^(?:[*+-]|\d+[.)])\s+/.test(trimmedLine))
+        return true;
+      if (/^\|/.test(trimmedLine))
+        return true;
+      if (/^<[^>]+>/.test(trimmedLine))
+        return true;
+      if (isFencedBlockDelimiter(trimmedLine))
+        return true;
+      return false;
+    }
+    function isListItemLine(trimmedLine) {
+      return /^(?:[*+-]|\d+[.)])\s+/.test(String(trimmedLine || ""));
+    }
+    function appendLegacyHardBreak(line) {
+      const value = String(line || "");
+      if (!value)
+        return value;
+      if (/<br\s*\/?>\s*$/i.test(value))
+        return value;
+      return `${value.replace(/[ \t]+$/, "")}<br>`;
+    }
+    function appendQuoteHardBreak(line) {
+      const value = String(line || "");
+      if (!value)
+        return value;
+      if (/\\\s*$/.test(value))
+        return value;
+      return `${value.replace(/[ \t]+$/, "")}\\`;
+    }
+    function injectHardBreaksForLegacyParity(markdown) {
+      const lines = String(markdown || "").split("\n");
+      let fenceState = null;
+      let inMathFence = false;
+      for (let i = 0; i < lines.length - 1; i += 1) {
+        const line = lines[i];
+        const nextLine = lines[i + 1];
+        const fenceDelimiter = parseFencedBlockDelimiter(line);
+        if (fenceDelimiter) {
+          if (!fenceState) {
+            fenceState = fenceDelimiter;
+          } else if (fenceDelimiter.marker === fenceState.marker && fenceDelimiter.length >= fenceState.length) {
+            fenceState = null;
+          }
+          continue;
+        }
+        if (!fenceState && isMathFenceDelimiter(line)) {
+          inMathFence = !inMathFence;
+          continue;
+        }
+        if (fenceState || inMathFence)
+          continue;
+        if (!line || !nextLine)
+          continue;
+        if (/[ \t]{2,}$/.test(line) || /\\$/.test(line))
+          continue;
+        if (isQuoteLine(line) && isQuoteLine(nextLine)) {
+          const currentQuoteContent = stripQuotePrefix(line).trim();
+          const nextQuoteContent = stripQuotePrefix(nextLine).trim();
+          if (!currentQuoteContent || !nextQuoteContent)
+            continue;
+          if (/^\[!/.test(currentQuoteContent) || /^\[!/.test(nextQuoteContent))
+            continue;
+          lines[i] = appendQuoteHardBreak(line);
+          continue;
+        }
+        const currentTrimmed = line.trim();
+        if (startsNewBlock(currentTrimmed) && !isListItemLine(currentTrimmed))
+          continue;
+        if (startsNewBlock(nextLine.trim()))
+          continue;
+        lines[i] = appendLegacyHardBreak(line);
+      }
+      return lines.join("\n");
+    }
+    function neutralizeUnsafeMarkdownLinks(markdown) {
+      const source = String(markdown || "");
+      if (!source)
+        return source;
+      const unsafeLinkPattern = /\[[^\]]+\]\(((?:javascript|vbscript|data):[^)\r\n]*)\)/gi;
+      return source.replace(unsafeLinkPattern, (match, _href, offset, fullText) => {
+        const prevChar = offset > 0 ? fullText[offset - 1] : "";
+        if (prevChar === "!" || prevChar === "\\") {
+          return match;
+        }
+        return `\\${match}`;
+      });
+    }
+    function neutralizePlainWikilinks(markdown) {
+      const source = String(markdown || "");
+      if (!source)
+        return source;
+      const escapePlainWikilinks = (value) => String(value || "").replace(/(^|[^!\\])(\[\[[^[\]\r\n]+?\]\])/g, (_match, prefix, wikilink) => {
+        return `${prefix}\\${wikilink}`;
+      });
+      const neutralizeLineOutsideInlineCode = (line) => {
+        const value = String(line || "");
+        if (!value || !value.includes("[["))
+          return value;
+        let result = "";
+        let cursor = 0;
+        const codeSpanPattern = /(`+)([\s\S]*?)(\1)/g;
+        let match = codeSpanPattern.exec(value);
+        while (match) {
+          const [segment] = match;
+          const start = match.index;
+          const end = start + segment.length;
+          result += escapePlainWikilinks(value.slice(cursor, start));
+          result += segment;
+          cursor = end;
+          match = codeSpanPattern.exec(value);
+        }
+        result += escapePlainWikilinks(value.slice(cursor));
+        return result;
+      };
+      const lines = source.split("\n");
+      let fenceState = null;
+      let inMathFence = false;
+      for (let i = 0; i < lines.length; i += 1) {
+        const line = lines[i];
+        const fenceDelimiter = parseFencedBlockDelimiter(line);
+        if (fenceDelimiter) {
+          if (!fenceState) {
+            fenceState = fenceDelimiter;
+          } else if (fenceDelimiter.marker === fenceState.marker && fenceDelimiter.length >= fenceState.length) {
+            fenceState = null;
+          }
+          continue;
+        }
+        if (!fenceState && isMathFenceDelimiter(line)) {
+          inMathFence = !inMathFence;
+          continue;
+        }
+        if (fenceState || inMathFence)
+          continue;
+        lines[i] = neutralizeLineOutsideInlineCode(line);
+      }
+      return lines.join("\n");
+    }
+    function preprocessMarkdownForTriplet(markdown, converter) {
+      let output = String(markdown || "");
+      output = output.replace(/^[\t ]+(\$\$)/gm, "$1");
+      output = output.replace(/!\[\[([^\[\]|]+)(?:\|([^\[\]]+))?\]\]/g, (match, imagePath, alt) => {
+        return `![${alt || ""}](${encodeURI(String(imagePath || "").trim())})`;
+      });
+      if (converter && typeof converter.stripFrontmatter === "function") {
+        output = converter.stripFrontmatter(output);
+      }
+      output = neutralizeUnsafeMarkdownLinks(output);
+      output = neutralizePlainWikilinks(output);
+      output = injectHardBreaksForLegacyParity(output);
+      return output;
+    }
+    function countUnresolvedImageEmbeds(root) {
+      if (!root)
+        return 0;
+      const embeds = Array.from(root.querySelectorAll("span.internal-embed,span.image-embed,div.internal-embed,div.image-embed"));
+      let unresolved = 0;
+      for (const embed of embeds) {
+        const isImageEmbed = embed.classList.contains("image-embed");
+        const hasImgChild = !!embed.querySelector("img");
+        if (isImageEmbed && !hasImgChild) {
+          unresolved += 1;
+        }
+      }
+      return unresolved;
+    }
+    async function waitForTripletDomToSettle(root, options = {}) {
+      const timeoutMs = Number.isFinite(options.timeoutMs) ? options.timeoutMs : 500;
+      const intervalMs = Number.isFinite(options.intervalMs) ? options.intervalMs : 16;
+      const start = Date.now();
+      let previousSnapshot = "";
+      let stableCount = 0;
+      while (Date.now() - start < timeoutMs) {
+        const unresolved = countUnresolvedImageEmbeds(root);
+        const snapshot = `${unresolved}:${root ? root.innerHTML : ""}`;
+        if (unresolved === 0 && snapshot === previousSnapshot) {
+          stableCount += 1;
+          if (stableCount >= 2)
+            return;
+        } else {
+          stableCount = 0;
+        }
+        previousSnapshot = snapshot;
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      }
+    }
+    async function renderByObsidianMarkdownRenderer({
+      app,
+      markdown,
+      sourcePath,
+      targetEl,
+      component = null,
+      markdownRenderer = MarkdownRenderer
+    }) {
+      if (!markdownRenderer) {
+        throw new Error("Obsidian MarkdownRenderer is not available");
+      }
+      if (typeof markdownRenderer.renderMarkdown === "function") {
+        await markdownRenderer.renderMarkdown(markdown, targetEl, sourcePath || "", component);
+        return;
+      }
+      if (typeof markdownRenderer.render === "function") {
+        if (!app)
+          throw new Error("Obsidian app instance is required for MarkdownRenderer.render");
+        await markdownRenderer.render(app, markdown, targetEl, sourcePath || "", component);
+        return;
+      }
+      throw new Error("Obsidian MarkdownRenderer does not expose renderMarkdown/render");
+    }
+    async function renderObsidianTripletMarkdown2({
+      app,
+      converter,
+      markdown,
+      sourcePath = "",
+      component = null,
+      markdownRenderer = MarkdownRenderer,
+      serializer = serializeObsidianRenderedHtml
+    }) {
+      if (typeof document === "undefined") {
+        throw new Error("Triplet renderer requires DOM environment");
+      }
+      if (!converter) {
+        throw new Error("Triplet renderer requires converter runtime");
+      }
+      const container = document.createElement("div");
+      const preparedMarkdown = preprocessMarkdownForTriplet(markdown, converter);
+      await renderByObsidianMarkdownRenderer({
+        app,
+        markdown: preparedMarkdown,
+        sourcePath,
+        targetEl: container,
+        component,
+        markdownRenderer
+      });
+      await waitForTripletDomToSettle(container);
+      const serializedHtml = serializer({
+        root: container,
+        converter,
+        sourcePath,
+        app
+      });
+      if (containsLegacyIncompatibleMathMarkup(serializedHtml) && typeof converter.convert === "function") {
+        if (typeof converter.updateSourcePath === "function") {
+          converter.updateSourcePath(sourcePath);
+        }
+        return converter.convert(markdown);
+      }
+      return serializedHtml;
+    }
+    module2.exports = {
+      containsLegacyIncompatibleMathMarkup,
+      neutralizeUnsafeMarkdownLinks,
+      neutralizePlainWikilinks,
+      preprocessMarkdownForTriplet,
+      injectHardBreaksForLegacyParity,
+      waitForTripletDomToSettle,
+      renderByObsidianMarkdownRenderer,
+      renderObsidianTripletMarkdown: renderObsidianTripletMarkdown2
     };
   }
 });
@@ -415,6 +1601,8 @@ var require_wechat_sync = __commonJS({
           let processedHtml = await processAllImages(currentHtml, api, (current, total) => {
             if (onImageProgress)
               onImageProgress(current, total);
+          }, {
+            accountId: account.id || ""
           });
           if (processedHtml.includes("mjx-container") || processedHtml.includes("<svg")) {
             if (onStatus)
@@ -478,7 +1666,44 @@ var require_sync_context = __commonJS({
 // services/wechat-media.js
 var require_wechat_media = __commonJS({
   "services/wechat-media.js"(exports2, module2) {
-    async function processAllImages({ html, api, progressCallback, pMap: pMap2, srcToBlob }) {
+    function hashBytesFNV1a(bytes) {
+      let hash = 2166136261;
+      for (let i = 0; i < bytes.length; i++) {
+        hash ^= bytes[i];
+        hash = Math.imul(hash, 16777619);
+      }
+      return (hash >>> 0).toString(16).padStart(8, "0");
+    }
+    async function computeBlobFingerprint(blob) {
+      if (!blob || typeof blob.arrayBuffer !== "function")
+        return "unknown";
+      const buffer = await blob.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      const contentHash = hashBytesFNV1a(bytes);
+      const type = blob.type || "application/octet-stream";
+      return `${type}:${bytes.length}:${contentHash}`;
+    }
+    function getCachedEntry(cache, key) {
+      if (!cache || !cache.has(key))
+        return null;
+      const value = cache.get(key);
+      if (typeof value === "string") {
+        return { url: value, fingerprint: "" };
+      }
+      if (value && typeof value === "object" && typeof value.url === "string") {
+        return value;
+      }
+      return null;
+    }
+    async function processAllImages({
+      html,
+      api,
+      progressCallback,
+      pMap: pMap2,
+      srcToBlob,
+      imageUploadCache,
+      cacheNamespace = ""
+    }) {
       const div = document.createElement("div");
       div.innerHTML = html;
       const imgs = Array.from(div.querySelectorAll("img"));
@@ -492,14 +1717,36 @@ var require_wechat_media = __commonJS({
       let completed = 0;
       const tasks = Array.from(uniqueUrls);
       await pMap2(tasks, async (src) => {
+        const cacheKey = `${cacheNamespace}::${src}`;
+        const cached = getCachedEntry(imageUploadCache, cacheKey);
         try {
           const blob = await srcToBlob(src);
+          const fingerprint = await computeBlobFingerprint(blob);
+          if (cached && cached.fingerprint && cached.fingerprint === fingerprint && cached.url) {
+            urlMap.set(src, cached.url);
+            completed++;
+            if (progressCallback) {
+              progressCallback(completed, total);
+            }
+            return;
+          }
           const res = await api.uploadImage(blob);
           urlMap.set(src, res.url);
+          if (imageUploadCache) {
+            imageUploadCache.set(cacheKey, {
+              url: res.url,
+              fingerprint
+            });
+          }
         } catch (error) {
           if (error.isFatal)
             throw error;
-          console.error("\u56FE\u7247\u5904\u7406\u5931\u8D25\uFF0C\u5DF2\u8DF3\u8FC7:", src, error);
+          if (cached && cached.url) {
+            console.warn("\u56FE\u7247\u8BFB\u53D6\u5931\u8D25\uFF0C\u4F7F\u7528\u7F13\u5B58\u94FE\u63A5\u515C\u5E95:", src);
+            urlMap.set(src, cached.url);
+          } else {
+            console.error("\u56FE\u7247\u5904\u7406\u5931\u8D25\uFF0C\u5DF2\u8DF3\u8FC7:", src, error);
+          }
         }
         completed++;
         if (progressCallback) {
@@ -1020,11 +2267,12 @@ var { createRenderPipelines } = require_render_pipeline();
 var { buildRenderRuntime } = require_dependency_loader();
 var { resolveMarkdownSource } = require_markdown_source();
 var { normalizeVaultPath, isAbsolutePathLike } = require_path_utils();
-var { renderNativeMarkdown } = require_native_renderer();
+var { renderObsidianTripletMarkdown } = require_obsidian_triplet_renderer();
 var { createWechatSyncService } = require_wechat_sync();
 var { resolveSyncAccount, toSyncFriendlyMessage } = require_sync_context();
 var { processAllImages: processAllImagesService, processMathFormulas: processMathFormulasService } = require_wechat_media();
 var { cleanHtmlForDraft: cleanHtmlForDraftService } = require_wechat_html_cleaner();
+var TRIPLET_PARITY_DEBUG_REV = "triplet-parity-r6";
 var APPLE_STYLE_VIEW = "apple-style-converter";
 var DEFAULT_SETTINGS = {
   theme: "github",
@@ -1050,11 +2298,17 @@ var DEFAULT_SETTINGS = {
   // 预览设置
   usePhoneFrame: true,
   // 是否使用手机框预览
-  // 渲染管线开关（Phase 1: 兼容层实验）
+  // 三件套渲染开关
+  useTripletPipeline: false,
+  tripletFallbackToPhase2: true,
+  enforceTripletParity: true,
+  // 严格零差异门禁
+  tripletParityVerboseLog: false,
+  // 输出完整差异 payload 到控制台（调试用）
+  // 旧字段保留用于迁移检测
   useNativePipeline: false,
   enableLegacyFallback: true,
   enforceNativeParity: true,
-  // Phase 2: strict byte-level parity gate
   // 排版设置
   sidePadding: 16,
   // 页面两侧留白 (px)
@@ -1335,7 +2589,9 @@ var AppleStyleView = class extends ItemView {
     this.sessionDigest = "";
     this.articleStates = /* @__PURE__ */ new Map();
     this.svgUploadCache = /* @__PURE__ */ new Map();
+    this.imageUploadCache = /* @__PURE__ */ new Map();
     this.renderGeneration = 0;
+    this.lastParityMismatchNoticeKey = "";
   }
   getViewType() {
     return APPLE_STYLE_VIEW;
@@ -1526,11 +2782,15 @@ var AppleStyleView = class extends ItemView {
       const { legacyPipeline, nativePipeline } = createRenderPipelines({
         converter: this.converter,
         getFlags: () => this.getRenderPipelineFlags(),
-        nativeRenderer: async (markdown, context = {}) => renderNativeMarkdown({
-          converter: this.converter,
-          markdown,
-          sourcePath: context.sourcePath || ""
-        })
+        candidateRenderer: async (markdown, context = {}) => {
+          return renderObsidianTripletMarkdown({
+            app: this.app,
+            converter: this.converter,
+            markdown,
+            sourcePath: context.sourcePath || "",
+            component: this
+          });
+        }
       });
       this.legacyRenderPipeline = legacyPipeline;
       this.nativeRenderPipeline = nativePipeline;
@@ -2242,13 +3502,16 @@ var AppleStyleView = class extends ItemView {
    * 处理 HTML 中的所有图片，上传到微信并替换链接
    * 支持并发上传 (Limit 3) 和进度回调
    */
-  async processAllImages(html, api, progressCallback) {
+  async processAllImages(html, api, progressCallback, cacheContext = {}) {
+    const accountId = (cacheContext == null ? void 0 : cacheContext.accountId) || "";
     return processAllImagesService({
       html,
       api,
       progressCallback,
       pMap,
-      srcToBlob: this.srcToBlob.bind(this)
+      srcToBlob: this.srcToBlob.bind(this),
+      imageUploadCache: this.imageUploadCache,
+      cacheNamespace: accountId
     });
   }
   /**
@@ -2403,16 +3666,30 @@ var AppleStyleView = class extends ItemView {
   }
   getRenderPipelineFlags() {
     var _a, _b, _c, _d, _e, _f;
+    const useTripletPipeline = ((_b = (_a = this.plugin) == null ? void 0 : _a.settings) == null ? void 0 : _b.useTripletPipeline) === true;
+    const tripletFallbackToPhase2 = ((_d = (_c = this.plugin) == null ? void 0 : _c.settings) == null ? void 0 : _d.tripletFallbackToPhase2) !== false;
+    const enforceTripletParity = ((_f = (_e = this.plugin) == null ? void 0 : _e.settings) == null ? void 0 : _f.enforceTripletParity) !== false;
     return {
-      useNativePipeline: ((_b = (_a = this.plugin) == null ? void 0 : _a.settings) == null ? void 0 : _b.useNativePipeline) === true,
-      enableLegacyFallback: ((_d = (_c = this.plugin) == null ? void 0 : _c.settings) == null ? void 0 : _d.enableLegacyFallback) !== false,
-      enforceNativeParity: ((_f = (_e = this.plugin) == null ? void 0 : _e.settings) == null ? void 0 : _f.enforceNativeParity) !== false,
-      parityTransform: (html) => this.cleanHtmlForDraft(html)
+      useTripletPipeline,
+      tripletFallbackToPhase2,
+      enforceTripletParity,
+      // Backward-compatible aliases for existing tests and fallback paths.
+      useNativePipeline: useTripletPipeline,
+      enableLegacyFallback: tripletFallbackToPhase2,
+      enforceNativeParity: enforceTripletParity,
+      parityErrorCode: "TRIPLET_PARITY_MISMATCH",
+      parityTransform: (html) => {
+        const cleaned = this.cleanHtmlForDraft(html);
+        return cleaned.replace(/>\r?\n\s*</g, "><").replace(/\r?\n/g, "");
+      },
+      onParityMismatch: ({ context, mismatch }) => {
+        this.logParityMismatchDetails((context == null ? void 0 : context.sourcePath) || "", mismatch || {});
+      }
     };
   }
   getActiveRenderPipeline() {
     const flags = this.getRenderPipelineFlags();
-    if (flags.useNativePipeline && this.nativeRenderPipeline) {
+    if (flags.useTripletPipeline && this.nativeRenderPipeline) {
       return this.nativeRenderPipeline;
     }
     return this.legacyRenderPipeline;
@@ -2459,10 +3736,105 @@ var AppleStyleView = class extends ItemView {
       cls: "apple-placeholder-note"
     });
   }
+  showParityMismatchPlaceholder(sourcePath, mismatch = {}) {
+    this.currentHtml = null;
+    this.previewContainer.empty();
+    this.previewContainer.removeClass("apple-has-content");
+    const index = Number.isInteger(mismatch.index) ? mismatch.index : -1;
+    const segmentCount = Number.isInteger(mismatch.segmentCount) ? mismatch.segmentCount : 0;
+    const name = sourcePath ? String(sourcePath).split("/").pop() : "\u5F53\u524D\u6587\u6863";
+    const box = this.previewContainer.createEl("div", { cls: "apple-placeholder" });
+    box.createEl("div", { cls: "apple-placeholder-icon", text: "\u26A0\uFE0F" });
+    box.createEl("h2", { text: "\u4E09\u4EF6\u5957\u6E32\u67D3\u672A\u901A\u8FC7\u96F6\u5DEE\u5F02\u95E8\u7981" });
+    box.createEl("p", {
+      text: `${name} \u4E0E Phase2 \u57FA\u7EBF\u8F93\u51FA\u5B58\u5728\u5DEE\u5F02\uFF08\u9996\u4E2A index ${index}\uFF0C\u5171 ${segmentCount} \u6BB5\u5DEE\u5F02\uFF09\u3002`
+    });
+    if (Array.isArray(mismatch.segments) && mismatch.segments.length > 0) {
+      const list = box.createEl("ul", { cls: "apple-parity-list" });
+      mismatch.segments.slice(0, 3).forEach((seg, idx) => {
+        const segIndex = Number.isInteger(seg.index) ? seg.index : -1;
+        const lLine = Number.isInteger(seg.legacyLine) ? seg.legacyLine : -1;
+        const lCol = Number.isInteger(seg.legacyColumn) ? seg.legacyColumn : -1;
+        list.createEl("li", {
+          text: `#${idx + 1}: index ${segIndex}\uFF08legacy ${lLine}:${lCol}\uFF09`
+        });
+      });
+    }
+    box.createEl("p", {
+      cls: "apple-placeholder-note",
+      text: "\u5EFA\u8BAE\u5F00\u542F\u201C\u4E09\u4EF6\u5957\u5931\u8D25\u65F6\u56DE\u9000 Phase2\u201D\uFF0C\u6216\u7EE7\u7EED\u5728\u5F53\u524D\u6A21\u5F0F\u4E0B\u5B9A\u4F4D\u5DEE\u5F02\u3002"
+    });
+    this.updateCurrentDoc();
+  }
+  logParityMismatchDetails(sourcePath, mismatch = {}) {
+    var _a, _b;
+    const fileName = sourcePath ? String(sourcePath).split("/").pop() : "\u5F53\u524D\u6587\u6863";
+    const index = Number.isInteger(mismatch.index) ? mismatch.index : -1;
+    const segmentCount = Number.isInteger(mismatch.segmentCount) ? mismatch.segmentCount : 0;
+    const lengthDelta = Number.isInteger(mismatch.lengthDelta) ? mismatch.lengthDelta : 0;
+    const legacyLength = Number.isInteger(mismatch.legacyLength) ? mismatch.legacyLength : -1;
+    const candidateLength = Number.isInteger(mismatch.candidateLength) ? mismatch.candidateLength : -1;
+    const verboseLog = ((_b = (_a = this.plugin) == null ? void 0 : _a.settings) == null ? void 0 : _b.tripletParityVerboseLog) === true;
+    console.groupCollapsed(
+      `[Triplet Parity] ${fileName} mismatch: index=${index}, segments=${segmentCount}, delta=${lengthDelta}`
+    );
+    console.warn("[Triplet Parity] summary", {
+      sourcePath,
+      index,
+      segmentCount,
+      lengthDelta,
+      legacyLength,
+      candidateLength,
+      truncated: mismatch.truncated === true
+    });
+    if (Array.isArray(mismatch.segments) && mismatch.segments.length > 0) {
+      const maxPreview = 5;
+      mismatch.segments.slice(0, maxPreview).forEach((seg, idx) => {
+        const segIndex = Number.isInteger(seg.index) ? seg.index : -1;
+        const legacyLine = Number.isInteger(seg.legacyLine) ? seg.legacyLine : -1;
+        const legacyColumn = Number.isInteger(seg.legacyColumn) ? seg.legacyColumn : -1;
+        const candidateLine = Number.isInteger(seg.candidateLine) ? seg.candidateLine : -1;
+        const candidateColumn = Number.isInteger(seg.candidateColumn) ? seg.candidateColumn : -1;
+        console.warn(`[Triplet Parity] segment #${idx + 1}`, {
+          index: segIndex,
+          legacy: `${legacyLine}:${legacyColumn}`,
+          candidate: `${candidateLine}:${candidateColumn}`,
+          legacySnippet: seg.legacySnippet,
+          candidateSnippet: seg.candidateSnippet
+        });
+      });
+      if (mismatch.segments.length > maxPreview) {
+        console.warn(`[Triplet Parity] ${mismatch.segments.length - maxPreview} more segments omitted from log preview`);
+      }
+    }
+    const fullDetails = {
+      revision: TRIPLET_PARITY_DEBUG_REV,
+      sourcePath,
+      index,
+      segmentCount,
+      lengthDelta,
+      legacyLength,
+      candidateLength,
+      truncated: mismatch.truncated === true,
+      segments: Array.isArray(mismatch.segments) ? mismatch.segments : []
+    };
+    if (typeof window !== "undefined") {
+      window.__OWC_LAST_PARITY_DETAILS = fullDetails;
+      window.__OWC_TRIPLET_PARITY_REV = TRIPLET_PARITY_DEBUG_REV;
+    }
+    if (verboseLog) {
+      console.log("[Triplet Parity] full-details", fullDetails);
+    }
+    console.groupEnd();
+    if (verboseLog) {
+      console.error("[Triplet Parity] full-details-json", JSON.stringify(fullDetails));
+    }
+  }
   /**
    * 转换当前文档
    */
   async convertCurrent(silent = false) {
+    var _a, _b;
     const generation = ++this.renderGeneration;
     const source = await resolveMarkdownSource({
       app: this.app,
@@ -2498,6 +3870,17 @@ var AppleStyleView = class extends ItemView {
         new Notice("\u2705 \u8F6C\u6362\u6210\u529F\uFF01");
     } catch (error) {
       console.error("\u8F6C\u6362\u5931\u8D25:", error);
+      if (error && (error.code === "TRIPLET_PARITY_MISMATCH" || error.code === "PARITY_MISMATCH")) {
+        const index = Number.isInteger((_a = error == null ? void 0 : error.parity) == null ? void 0 : _a.index) ? error.parity.index : -1;
+        const segmentCount = Number.isInteger((_b = error == null ? void 0 : error.parity) == null ? void 0 : _b.segmentCount) ? error.parity.segmentCount : 0;
+        this.showParityMismatchPlaceholder(sourcePath, error.parity || {});
+        const noticeKey = `${sourcePath || ""}:${index}:${segmentCount}`;
+        if (!silent || this.lastParityMismatchNoticeKey !== noticeKey) {
+          new Notice(`\u26A0\uFE0F \u4E09\u4EF6\u5957\u6E32\u67D3\u4E0E Phase2 \u57FA\u7EBF\u4E0D\u4E00\u81F4\uFF08\u9996\u4E2A index ${index}\uFF0C\u5171 ${segmentCount} \u6BB5\uFF09`);
+          this.lastParityMismatchNoticeKey = noticeKey;
+        }
+        return;
+      }
       if (!silent)
         new Notice("\u274C \u8F6C\u6362\u5931\u8D25: " + error.message);
     }
@@ -2677,6 +4060,12 @@ var AppleStyleView = class extends ItemView {
     if (this.articleStates) {
       this.articleStates.clear();
     }
+    if (this.svgUploadCache) {
+      this.svgUploadCache.clear();
+    }
+    if (this.imageUploadCache) {
+      this.imageUploadCache.clear();
+    }
     console.log("\u{1F34E} \u8F6C\u6362\u5668\u9762\u677F\u5DF2\u5173\u95ED");
   }
   /**
@@ -2831,26 +4220,30 @@ var AppleStyleSettingTab = class extends PluginSettingTab {
       });
     }
     new Setting(containerEl).setName("\u9AD8\u7EA7\u8BBE\u7F6E").setHeading();
-    new Setting(containerEl).setName("\u4F7F\u7528\u5B9E\u9A8C\u6E32\u67D3\u7BA1\u7EBF\uFF08Phase 1\uFF09").setDesc("\u5F53\u524D\u9636\u6BB5\u4ECD\u590D\u7528 Legacy Converter\uFF0C\u5E76\u589E\u52A0\u5B89\u5168\u9884\u5904\u7406/\u540E\u5904\u7406\uFF1B\u5E76\u975E\u5B8C\u6574 Obsidian \u539F\u751F\u4E09\u4EF6\u5957\u5B9E\u73B0\u3002\u5F00\u542F\u540E\u53EF\u80FD\u4E0E Legacy \u6709\u5C11\u91CF\u8F93\u51FA\u5DEE\u5F02\u3002").addToggle((toggle) => toggle.setValue(this.plugin.settings.useNativePipeline === true).onChange(async (value) => {
-      this.plugin.settings.useNativePipeline = value;
+    new Setting(containerEl).setName("\u542F\u7528 Obsidian \u539F\u751F\u4E09\u4EF6\u5957\u6E32\u67D3").setDesc("\u4E00\u6B21\u6027\u542F\u7528 Source + Render + Export \u4E09\u4EF6\u5957\u94FE\u8DEF\u3002\u5173\u95ED\u65F6\u4F7F\u7528\u5F53\u524D\u7A33\u5B9A Phase2 \u57FA\u7EBF\u6E32\u67D3\u3002").addToggle((toggle) => toggle.setValue(this.plugin.settings.useTripletPipeline === true).onChange(async (value) => {
+      this.plugin.settings.useTripletPipeline = value;
       await this.plugin.saveSettings();
-      new Notice(value ? "\u5DF2\u542F\u7528\u5B9E\u9A8C\u6E32\u67D3\u7BA1\u7EBF\uFF08Phase 1\uFF0C\u53EF\u80FD\u6709\u5C11\u91CF\u8F93\u51FA\u5DEE\u5F02\uFF09" : "\u5DF2\u5207\u56DE Legacy \u6E32\u67D3\u5165\u53E3");
+      new Notice(value ? "\u5DF2\u542F\u7528 Obsidian \u539F\u751F\u4E09\u4EF6\u5957\u6E32\u67D3" : "\u5DF2\u5207\u56DE Phase2 \u57FA\u7EBF\u6E32\u67D3");
       const converterView = this.plugin.getConverterView();
       if (converterView) {
         await converterView.convertCurrent(true);
       }
     }));
-    new Setting(containerEl).setName("\u539F\u751F\u5931\u8D25\u65F6\u56DE\u9000 Legacy").setDesc("\u5EFA\u8BAE\u4FDD\u6301\u5F00\u542F\u3002\u539F\u751F\u7BA1\u7EBF\u5931\u8D25\u65F6\u81EA\u52A8\u4F7F\u7528\u73B0\u6709\u7A33\u5B9A\u6E32\u67D3\u94FE\u8DEF\uFF0C\u907F\u514D\u5F71\u54CD\u65E5\u5E38\u4F7F\u7528\u3002").addToggle((toggle) => toggle.setValue(this.plugin.settings.enableLegacyFallback !== false).onChange(async (value) => {
-      this.plugin.settings.enableLegacyFallback = value;
+    new Setting(containerEl).setName("\u4E09\u4EF6\u5957\u5931\u8D25\u65F6\u56DE\u9000 Phase2").setDesc("\u5EFA\u8BAE\u4FDD\u6301\u5F00\u542F\u3002\u4E09\u4EF6\u5957\u6E32\u67D3\u5931\u8D25\u6216\u672A\u901A\u8FC7\u95E8\u7981\u65F6\u81EA\u52A8\u56DE\u9000\uFF0C\u786E\u4FDD\u65E5\u5E38\u53EF\u7528\u6027\u3002").addToggle((toggle) => toggle.setValue(this.plugin.settings.tripletFallbackToPhase2 !== false).onChange(async (value) => {
+      this.plugin.settings.tripletFallbackToPhase2 = value;
       await this.plugin.saveSettings();
     }));
-    new Setting(containerEl).setName("\u96F6\u5DEE\u5F02\u95E8\u7981\uFF08Phase 2\uFF09").setDesc("\u5F00\u542F\u540E\u4F1A\u5C06\u5B9E\u9A8C\u6E32\u67D3\u8F93\u51FA\u4E0E Legacy \u8F93\u51FA\u8FDB\u884C\u5B57\u8282\u7EA7\u5BF9\u6BD4\uFF1B\u82E5\u4E0D\u4E00\u81F4\u5219\u81EA\u52A8\u56DE\u9000 Legacy\u3002\u5EFA\u8BAE\u4FDD\u6301\u5F00\u542F\u3002").addToggle((toggle) => toggle.setValue(this.plugin.settings.enforceNativeParity !== false).onChange(async (value) => {
-      this.plugin.settings.enforceNativeParity = value;
+    new Setting(containerEl).setName("\u4E09\u4EF6\u5957\u96F6\u5DEE\u5F02\u95E8\u7981").setDesc("\u5F00\u542F\u540E\u4F1A\u5C06\u4E09\u4EF6\u5957\u8F93\u51FA\u4E0E Phase2 \u57FA\u7EBF\u505A\u5B57\u8282\u7EA7\u5BF9\u6BD4\uFF1B\u4E0D\u4E00\u81F4\u65F6\u6309\u56DE\u9000\u7B56\u7565\u5904\u7406\u3002\u5EFA\u8BAE\u4FDD\u6301\u5F00\u542F\u3002").addToggle((toggle) => toggle.setValue(this.plugin.settings.enforceTripletParity !== false).onChange(async (value) => {
+      this.plugin.settings.enforceTripletParity = value;
       await this.plugin.saveSettings();
       const converterView = this.plugin.getConverterView();
       if (converterView) {
         await converterView.convertCurrent(true);
       }
+    }));
+    new Setting(containerEl).setName("\u8F93\u51FA\u4E09\u4EF6\u5957\u5B8C\u6574\u5DEE\u5F02\u65E5\u5FD7\uFF08\u8C03\u8BD5\uFF09").setDesc("\u9ED8\u8BA4\u5173\u95ED\u3002\u5F00\u542F\u540E\u4F1A\u628A\u5B8C\u6574\u5DEE\u5F02 payload \u8F93\u51FA\u5230\u63A7\u5236\u53F0\uFF0C\u65E5\u5FD7\u4F53\u79EF\u4F1A\u660E\u663E\u589E\u5927\u3002").addToggle((toggle) => toggle.setValue(this.plugin.settings.tripletParityVerboseLog === true).onChange(async (value) => {
+      this.plugin.settings.tripletParityVerboseLog = value;
+      await this.plugin.saveSettings();
     }));
     new Setting(containerEl).setName("\u53D1\u9001\u6210\u529F\u540E\u81EA\u52A8\u6E05\u7406\u8D44\u6E90").setDesc("\u9ED8\u8BA4\u5173\u95ED\u3002\u5F00\u542F\u540E\u4F1A\u5728\u521B\u5EFA\u8349\u7A3F\u6210\u529F\u540E\uFF0C\u5220\u9664\u4F60\u5728\u4E0B\u65B9\u914D\u7F6E\u7684\u76EE\u5F55\u3002").addToggle((toggle) => toggle.setValue(this.plugin.settings.cleanupAfterSync).onChange(async (value) => {
       this.plugin.settings.cleanupAfterSync = value;
@@ -3034,7 +4427,8 @@ var AppleStylePlugin = class extends Plugin {
     return null;
   }
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const loadedData = await this.loadData() || {};
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData);
     let didMigrate = false;
     if (this.settings.wechatAppId && this.settings.wechatAccounts.length === 0) {
       const migratedAccount = {
@@ -3066,6 +4460,21 @@ var AppleStylePlugin = class extends Plugin {
       delete this.settings.cleanupTarget;
       didMigrate = true;
     }
+    if (!Object.prototype.hasOwnProperty.call(loadedData, "useTripletPipeline") && Object.prototype.hasOwnProperty.call(loadedData, "useNativePipeline")) {
+      this.settings.useTripletPipeline = loadedData.useNativePipeline === true;
+      didMigrate = true;
+    }
+    if (!Object.prototype.hasOwnProperty.call(loadedData, "tripletFallbackToPhase2") && Object.prototype.hasOwnProperty.call(loadedData, "enableLegacyFallback")) {
+      this.settings.tripletFallbackToPhase2 = loadedData.enableLegacyFallback !== false;
+      didMigrate = true;
+    }
+    if (!Object.prototype.hasOwnProperty.call(loadedData, "enforceTripletParity") && Object.prototype.hasOwnProperty.call(loadedData, "enforceNativeParity")) {
+      this.settings.enforceTripletParity = loadedData.enforceNativeParity !== false;
+      didMigrate = true;
+    }
+    this.settings.useNativePipeline = this.settings.useTripletPipeline === true;
+    this.settings.enableLegacyFallback = this.settings.tripletFallbackToPhase2 !== false;
+    this.settings.enforceNativeParity = this.settings.enforceTripletParity !== false;
     if (didMigrate) {
       await this.saveSettings();
     }

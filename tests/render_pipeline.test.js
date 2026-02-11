@@ -46,7 +46,7 @@ describe('Render Pipeline Switch (Native + Legacy Fallback)', () => {
       getFlags: () => ({ useNativePipeline: true, enableLegacyFallback: false }),
     });
 
-    await expect(native.renderForPreview('body')).rejects.toThrow('Native render pipeline is not implemented yet');
+    await expect(native.renderForPreview('body')).rejects.toThrow('Triplet render pipeline is not implemented yet');
   });
 
   it('native pipeline should fallback to legacy when renderer throws', async () => {
@@ -136,6 +136,45 @@ describe('Render Pipeline Switch (Native + Legacy Fallback)', () => {
 
     await expect(native.renderForPreview('body')).rejects.toMatchObject({
       code: 'PARITY_MISMATCH',
+    });
+  });
+
+  it('native pipeline should honor triplet-prefixed flags', async () => {
+    const nativeRenderer = vi.fn().mockResolvedValue('<section>native</section>');
+    const legacy = { renderForPreview: vi.fn().mockResolvedValue('<section>legacy</section>') };
+    const native = new NativeRenderPipeline({
+      nativeRenderer,
+      legacyPipeline: legacy,
+      getFlags: () => ({
+        useTripletPipeline: true,
+        tripletFallbackToPhase2: false,
+        enforceTripletParity: true,
+      }),
+    });
+
+    await expect(native.renderForPreview('body')).rejects.toMatchObject({
+      code: 'PARITY_MISMATCH',
+    });
+    expect(nativeRenderer).toHaveBeenCalledTimes(1);
+    expect(legacy.renderForPreview).toHaveBeenCalledTimes(1);
+  });
+
+  it('native pipeline should expose custom parity error code when configured', async () => {
+    const nativeRenderer = vi.fn().mockResolvedValue('<section>native</section>');
+    const legacy = { renderForPreview: vi.fn().mockResolvedValue('<section>legacy</section>') };
+    const native = new NativeRenderPipeline({
+      nativeRenderer,
+      legacyPipeline: legacy,
+      getFlags: () => ({
+        useTripletPipeline: true,
+        tripletFallbackToPhase2: false,
+        enforceTripletParity: true,
+        parityErrorCode: 'TRIPLET_PARITY_MISMATCH',
+      }),
+    });
+
+    await expect(native.renderForPreview('body')).rejects.toMatchObject({
+      code: 'TRIPLET_PARITY_MISMATCH',
     });
   });
 
@@ -242,6 +281,8 @@ describe('Render Pipeline Switch (Native + Legacy Fallback)', () => {
     expect(payload.mismatch.index).toBeGreaterThanOrEqual(9);
     expect(payload.mismatch.legacySnippet).toContain('legacy');
     expect(payload.mismatch.candidateSnippet).toContain('native');
+    expect(payload.mismatch.segmentCount).toBeGreaterThanOrEqual(1);
+    expect(Array.isArray(payload.mismatch.segments)).toBe(true);
   });
 
   it('createRenderPipelines should expose both pipeline instances', async () => {

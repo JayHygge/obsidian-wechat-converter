@@ -1,4 +1,43 @@
-async function processAllImages({ html, api, progressCallback, pMap, srcToBlob }) {
+function hashBytesFNV1a(bytes) {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < bytes.length; i++) {
+    hash ^= bytes[i];
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+async function computeBlobFingerprint(blob) {
+  if (!blob || typeof blob.arrayBuffer !== 'function') return 'unknown';
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const contentHash = hashBytesFNV1a(bytes);
+  const type = blob.type || 'application/octet-stream';
+  return `${type}:${bytes.length}:${contentHash}`;
+}
+
+function getCachedEntry(cache, key) {
+  if (!cache || !cache.has(key)) return null;
+  const value = cache.get(key);
+  if (typeof value === 'string') {
+    // Backward compatibility with old cache format (url string only)
+    return { url: value, fingerprint: '' };
+  }
+  if (value && typeof value === 'object' && typeof value.url === 'string') {
+    return value;
+  }
+  return null;
+}
+
+async function processAllImages({
+  html,
+  api,
+  progressCallback,
+  pMap,
+  srcToBlob,
+  imageUploadCache,
+  cacheNamespace = '',
+}) {
 
     const div = document.createElement('div');
     div.innerHTML = html;
@@ -20,15 +59,44 @@ async function processAllImages({ html, api, progressCallback, pMap, srcToBlob }
     const tasks = Array.from(uniqueUrls);
 
     await pMap(tasks, async (src) => {
+        const cacheKey = `${cacheNamespace}::${src}`;
+        const cached = getCachedEntry(imageUploadCache, cacheKey);
         try {
           const blob = await srcToBlob(src);
+          const fingerprint = await computeBlobFingerprint(blob);
+
+          if (
+            cached &&
+            cached.fingerprint &&
+            cached.fingerprint === fingerprint &&
+            cached.url
+          ) {
+            urlMap.set(src, cached.url);
+            completed++;
+            if (progressCallback) {
+              progressCallback(completed, total);
+            }
+            return;
+          }
+
           const res = await api.uploadImage(blob);
           urlMap.set(src, res.url);
+          if (imageUploadCache) {
+            imageUploadCache.set(cacheKey, {
+              url: res.url,
+              fingerprint,
+            });
+          }
         } catch (error) {
           // 熔断机制：如果是配额超限等致命错误，停止后续所有上传
           if (error.isFatal) throw error;
 
-          console.error('图片处理失败，已跳过:', src, error);
+          if (cached && cached.url) {
+            console.warn('图片读取失败，使用缓存链接兜底:', src);
+            urlMap.set(src, cached.url);
+          } else {
+            console.error('图片处理失败，已跳过:', src, error);
+          }
           // 仅在控制台记录，不中断流程，也不频繁弹窗打扰用户
           // 用户会在预览中看到该图片未被替换
         }

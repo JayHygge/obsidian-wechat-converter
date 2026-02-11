@@ -9,6 +9,12 @@
     "id": "control-micro",
     "fixture": "control-micro.md",
     "sourcePath": "fixtures/control-micro.md",
-    "expectParityMismatch": true
+    "expectParityMismatch": false
+  },
+  {
+    "id": "control-micro-placeholder-data",
+    "fixture": "control-micro-placeholder-data.md",
+    "sourcePath": "fixtures/control-micro-placeholder-data.md",
+    "expectParityMismatch": false
   }
 ]

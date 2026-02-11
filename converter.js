@@ -639,21 +639,28 @@ ${macHeader}
 
   validateLink(url, isImage = false) {
     if (!url) return '#';
+    const value = String(url).trim();
+    if (!value) return '#';
+
+    // Keep legacy parity: allow raw data:image src in image context.
+    // Non-image data: remains blocked.
+    if (/^data:/i.test(value)) {
+      if (!isImage) return '#unsafe';
+      return /^data:image\//i.test(value) ? value : '#';
+    }
+
     // Allow safe protocols
-    // data: is only allowed for images
     const safeProtocols = ['http:', 'https:', 'obsidian:', 'mailto:', 'tel:', 'app:', 'capacitor:'];
-    if (isImage) safeProtocols.push('data:');
 
     try {
       // URL constructor might fail for some internal links or malformed data URIs
-      const parsed = new URL(url);
-      if (safeProtocols.includes(parsed.protocol)) return url;
-
-      // If it's a data: URI but not an image context, neutralize it explicitly
-      if (parsed.protocol === 'data:' && !isImage) return '#unsafe';
+      const parsed = new URL(value);
+      if (safeProtocols.includes(parsed.protocol)) {
+        return value;
+      }
     } catch (e) {
       // Handle relative paths or Obsidian internal links that URL() can't parse
-      if (url.startsWith('#') || url.startsWith('/') || !url.includes(':')) return url;
+      if (value.startsWith('#') || value.startsWith('/') || !value.includes(':')) return value;
     }
     return '#'; // Block javascript: and other dangerous protocols
   }

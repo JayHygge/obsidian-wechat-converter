@@ -40,4 +40,158 @@ describe('Wechat Media Service', () => {
 
     expect(output).toBe(html);
   });
+
+  it('processAllImages should reuse cache across runs for same account', async () => {
+    const html = '<p><img src="app://cached"></p>';
+    const srcToBlob = vi.fn(async () => new Blob(['x'], { type: 'image/png' }));
+    const uploadImage = vi.fn(async () => ({ url: 'https://wx/cached.png' }));
+    const cache = new Map();
+
+    const first = await processAllImages({
+      html,
+      api: { uploadImage },
+      progressCallback: null,
+      pMap: serialPMap,
+      srcToBlob,
+      imageUploadCache: cache,
+      cacheNamespace: 'acc-1',
+    });
+
+    const second = await processAllImages({
+      html,
+      api: { uploadImage },
+      progressCallback: null,
+      pMap: serialPMap,
+      srcToBlob,
+      imageUploadCache: cache,
+      cacheNamespace: 'acc-1',
+    });
+
+    expect(first).toContain('https://wx/cached.png');
+    expect(second).toContain('https://wx/cached.png');
+    expect(uploadImage).toHaveBeenCalledTimes(1);
+    expect(srcToBlob).toHaveBeenCalledTimes(2);
+  });
+
+  it('processAllImages cache should be isolated by account namespace', async () => {
+    const html = '<p><img src="app://same"></p>';
+    const srcToBlob = vi.fn(async () => new Blob(['x'], { type: 'image/png' }));
+    const uploadImage = vi.fn(async () => ({ url: 'https://wx/same.png' }));
+    const cache = new Map();
+
+    await processAllImages({
+      html,
+      api: { uploadImage },
+      progressCallback: null,
+      pMap: serialPMap,
+      srcToBlob,
+      imageUploadCache: cache,
+      cacheNamespace: 'acc-1',
+    });
+
+    await processAllImages({
+      html,
+      api: { uploadImage },
+      progressCallback: null,
+      pMap: serialPMap,
+      srcToBlob,
+      imageUploadCache: cache,
+      cacheNamespace: 'acc-2',
+    });
+
+    expect(uploadImage).toHaveBeenCalledTimes(2);
+  });
+
+  it('processAllImages should re-upload when same src content changes', async () => {
+    const html = '<p><img src="app://mutable"></p>';
+    const srcToBlob = vi
+      .fn()
+      .mockResolvedValueOnce({
+        type: 'image/png',
+        arrayBuffer: async () => new Uint8Array([1]).buffer,
+      })
+      .mockResolvedValueOnce({
+        type: 'image/png',
+        arrayBuffer: async () => new Uint8Array([2]).buffer,
+      });
+    const uploadImage = vi
+      .fn()
+      .mockResolvedValueOnce({ url: 'https://wx/mutable-v1.png' })
+      .mockResolvedValueOnce({ url: 'https://wx/mutable-v2.png' });
+    const cache = new Map();
+
+    const first = await processAllImages({
+      html,
+      api: { uploadImage },
+      progressCallback: null,
+      pMap: serialPMap,
+      srcToBlob,
+      imageUploadCache: cache,
+      cacheNamespace: 'acc-1',
+    });
+
+    const second = await processAllImages({
+      html,
+      api: { uploadImage },
+      progressCallback: null,
+      pMap: serialPMap,
+      srcToBlob,
+      imageUploadCache: cache,
+      cacheNamespace: 'acc-1',
+    });
+
+    expect(first).toContain('https://wx/mutable-v1.png');
+    expect(second).toContain('https://wx/mutable-v2.png');
+    expect(uploadImage).toHaveBeenCalledTimes(2);
+  });
+
+  it('processAllImages should fallback to object cache url when src read fails', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const html = '<p><img src="app://offline"></p>';
+    const srcToBlob = vi.fn().mockRejectedValue(new Error('read failed'));
+    const uploadImage = vi.fn();
+    const cache = new Map([
+      ['acc-1::app://offline', { url: 'https://wx/offline-cached.png', fingerprint: 'x' }],
+    ]);
+
+    const output = await processAllImages({
+      html,
+      api: { uploadImage },
+      progressCallback: null,
+      pMap: serialPMap,
+      srcToBlob,
+      imageUploadCache: cache,
+      cacheNamespace: 'acc-1',
+    });
+
+    expect(output).toContain('https://wx/offline-cached.png');
+    expect(uploadImage).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('processAllImages should fallback to legacy string cache url when src read fails', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const html = '<p><img src="app://legacy-cache"></p>';
+    const srcToBlob = vi.fn().mockRejectedValue(new Error('read failed'));
+    const uploadImage = vi.fn();
+    const cache = new Map([
+      ['acc-1::app://legacy-cache', 'https://wx/legacy-cached.png'],
+    ]);
+
+    const output = await processAllImages({
+      html,
+      api: { uploadImage },
+      progressCallback: null,
+      pMap: serialPMap,
+      srcToBlob,
+      imageUploadCache: cache,
+      cacheNamespace: 'acc-1',
+    });
+
+    expect(output).toContain('https://wx/legacy-cached.png');
+    expect(uploadImage).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
 });

@@ -122,4 +122,17 @@ describe('Native Renderer', () => {
       })
     ).rejects.toThrow('Native converter is not ready');
   });
+
+  it('should preserve legacy-compatible output when strictLegacyParity is enabled', async () => {
+    const md = readFixture('control-micro.md');
+    const legacyHtml = await converter.convert(md);
+    const strictHtml = await renderNativeMarkdown({
+      converter,
+      markdown: md,
+      sourcePath: '',
+      strictLegacyParity: true,
+    });
+
+    expect(strictHtml).toBe(legacyHtml);
+  });
 });

@@ -49,6 +49,7 @@ describe('Parity Corpus (Phase 2 Strict No-Diff Gate)', () => {
             converter,
             markdown,
             sourcePath: context.sourcePath || '',
+            strictLegacyParity: flags.enforceNativeParity === true,
           }),
       });
 
