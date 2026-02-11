@@ -1,6 +1,6 @@
 /**
  * 🍎 Apple Style 多主题系统
- * 支持多种主题风格：简约、经典、水墨、极光等
+ * 支持多种主题风格：简约、经典、优雅、水墨、橙红等
  * 设计理念：克制、优雅、注重细节
  */
 
@@ -108,6 +108,16 @@ window.AppleTheme = class AppleTheme {
       linkDecoration: 'none',
       blockquoteBorderWidth: 0,          // 居中样式不需要左边框
       blockquoteStyle: 'center',         // 新增：居中引用
+    },
+
+    inkwash: {
+      name: '水墨',
+      fullOverride: true,               // 固定配色，不随 themeColor 变化
+    },
+
+    latepost: {
+      name: '橙红',
+      fullOverride: true,               // 固定配色，不随 themeColor 变化
     },
   };
 
@@ -232,6 +242,13 @@ window.AppleTheme = class AppleTheme {
    */
   getStyle(tagName) {
     const config = this.getThemeConfig();
+
+    // fullOverride 主题：固定配色，跳过参数化系统
+    if (config.fullOverride) {
+      if (this.themeName === 'inkwash') return this.getInkwashStyle(tagName);
+      if (this.themeName === 'latepost') return this.getLatepostStyle(tagName);
+    }
+
     const sizes = this.getSizes();
     const font = this.getFontFamily();
     const color = this.getThemeColorValue();
@@ -435,6 +452,180 @@ window.AppleTheme = class AppleTheme {
         return `${base} font-style: italic; font-family: serif; border-bottom: 1px dashed #ccc; display: inline-block; padding-bottom: 2px;`;
       default:
         return base;
+    }
+  }
+
+  // === Full Override Themes ===
+
+  /**
+   * 🖌️ 水墨主题 — 传统书法风格
+   * 固定配色：牙色底 #faf6ef，墨色字 #2c2418，朱印 #a03020
+   */
+  getInkwashStyle(tagName) {
+    const serifFont = `'Noto Serif SC', 'SimSun', serif`;
+    const monoFont = `'DM Mono', 'Courier New', monospace`;
+
+    switch (tagName) {
+      case 'section':
+        return `font-family: 'LXGW WenKai', ${serifFont}; font-size: 16px; line-height: 2; color: #2c2418; padding: 32px 24px; background: #faf6ef; max-width: 100%; word-wrap: break-word; text-align: justify;`;
+
+      case 'h1':
+        return `font-family: ${serifFont}; font-size: 32px; font-weight: 900; margin: 0 0 8px; color: #1a1208; text-align: center; line-height: 1.3; letter-spacing: 4px;`;
+      case 'h2':
+        return `font-family: ${serifFont}; font-size: 24px; font-weight: 700; margin: 40px 0 16px; color: #1a1208; line-height: 1.4; letter-spacing: 2px; border-bottom: 1px solid #c4b69c; padding-bottom: 10px; text-align: left;`;
+      case 'h3':
+        return `font-family: ${serifFont}; font-size: 20px; font-weight: 700; margin: 36px 0 14px; color: #1a1208; line-height: 1.4; letter-spacing: 1px; padding-left: 14px; border-left: 3px solid #a03020; text-align: left;`;
+      case 'h4':
+        return `font-family: ${serifFont}; font-size: 17px; font-weight: 700; margin: 28px 0 10px; color: #5c4a32; line-height: 1.4; letter-spacing: 1px; text-align: left;`;
+      case 'h5':
+        return `font-family: ${serifFont}; font-size: 16px; font-weight: 700; color: #5c4a32; margin: 10px 0; text-align: left; line-height: 1.4;`;
+      case 'h6':
+        return `font-family: ${serifFont}; font-size: 16px; font-weight: 700; color: #5c4a32; margin: 10px 0; text-align: left; line-height: 1.4;`;
+
+      case 'p':
+        return `font-size: 16px; line-height: 2; color: #3d3222; margin: 0 0 24px; text-indent: 2em;`;
+
+      case 'blockquote':
+        return `font-family: ${serifFont}; font-size: 17px; line-height: 2.2; color: #5c4a32; background: #f0e8d8; margin: 28px 20px; padding: 24px 28px; text-align: center; border: none; border-radius: 4px; position: relative; font-style: italic; letter-spacing: 1px;`;
+
+      case 'pre':
+        return `background: #f0e8d8; border: 1px solid #ddd2c0; border-radius: 6px; padding: 18px 20px; margin: 24px 0; overflow-x: auto; font-family: ${monoFont}; font-size: 14px; line-height: 1.7; color: #3d3222;`;
+      case 'code':
+        return `font-family: ${monoFont}; font-size: 14px; color: #6b5340; background: #efe8db; padding: 2px 6px; border-radius: 3px; border: 1px solid #ddd2c0;`;
+
+      case 'ul':
+        return `font-size: 16px; line-height: 2; color: #3d3222; margin: 16px 0; padding-left: 20px; list-style-type: disc;`;
+      case 'ol':
+        return `font-size: 16px; line-height: 2; color: #3d3222; margin: 16px 0; padding-left: 20px; list-style-type: decimal;`;
+      case 'li':
+        return `margin: 6px 0; line-height: 2; color: #3d3222;`;
+      case 'li p':
+        return `margin: 0; padding: 0; line-height: 2;`;
+
+      case 'figure':
+        return `display: block; margin: 24px 0; text-align: center; border: 1px solid #ddd2c0; border-radius: 4px; padding: 10px;`;
+      case 'figcaption':
+        return `font-size: 13px; color: #8b7355; text-align: center; margin-top: 8px;`;
+      case 'img':
+        return `display: block; margin: 0 auto; max-width: 100%; border-radius: 4px; border: 1px solid #ddd2c0;`;
+
+      case 'a':
+        return `color: #a03020; text-decoration: none; border-bottom: 1px dashed #a03020;`;
+
+      case 'table':
+        return `border-collapse: collapse; width: 100%; margin: 24px 0;`;
+      case 'th':
+        return `font-weight: 700; color: #1a1208; padding: 12px 0; text-align: left; font-size: 14px; border-bottom: 2px solid #8b7355; letter-spacing: 1px;`;
+      case 'td':
+        return `border-bottom: 1px solid #ddd2c0; padding: 12px 0; text-align: left; color: #3d3222;`;
+      case 'thead':
+        return ``;
+
+      case 'hr':
+        return `border: 0; margin: 36px auto; text-align: center; color: #c4b69c; font-size: 14px; letter-spacing: 8px;`;
+
+      case 'strong':
+        return `font-weight: 700; color: #1a1208;`;
+      case 'em':
+        return `font-style: italic; color: #3d3222;`;
+      case 'del':
+        return `text-decoration: line-through; color: #8b7355;`;
+
+      case 'avatar-header':
+        return `margin: 0 0 8px 0 !important; display: flex !important; align-items: center !important; justify-content: flex-start !important; width: 100%; flex-direction: row !important; flex-wrap: nowrap !important; text-align: left !important;`;
+      case 'avatar':
+        return `display: inline-block !important; vertical-align: middle !important; margin: 0 !important; width: 32px !important; height: 32px !important; border-radius: 50%; object-fit: cover; border: 1px solid #ddd2c0; flex-shrink: 0;`;
+      case 'avatar-caption':
+        return `display: inline-block !important; vertical-align: middle !important; font-size: 13px; color: #8b7355; margin-left: 10px; line-height: 1.4; text-align: left !important;`;
+
+      default:
+        return '';
+    }
+  }
+
+  /**
+   * 🔴 橙红主题 — 晚点深度风格
+   * 固定配色：白底 #fff，墨黑字 #1a1a1a，品牌红 #d32f2f
+   */
+  getLatepostStyle(tagName) {
+    const sansFont = `-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif`;
+    const monoFont = `'SF Mono', Menlo, Consolas, monospace`;
+
+    switch (tagName) {
+      case 'section':
+        return `font-family: ${sansFont}; font-size: 17px; line-height: 1.8; color: #1a1a1a; padding: 16px 12px 36px 12px; background-color: #fff; max-width: 100%; word-wrap: break-word;`;
+
+      case 'h1':
+        return `font-size: 26px; font-weight: 700; color: #1a1a1a; line-height: 1.3; margin: 36px 0 18px; padding-left: 16px; border-left: 5px solid #d32f2f; text-align: left;`;
+      case 'h2':
+        return `font-size: 20px; font-weight: 600; color: #fff; line-height: 1.4; margin: 32px 0 16px; padding: 12px 20px; background-color: #d32f2f; border-radius: 4px; text-align: left;`;
+      case 'h3':
+        return `font-size: 18px; font-weight: 600; color: #d32f2f; line-height: 1.45; margin: 28px 0 14px; padding-left: 14px; border-left: 4px solid #d32f2f; text-align: left;`;
+      case 'h4':
+        return `font-size: 17px; font-weight: 600; color: #1a1a1a; line-height: 1.5; margin: 24px 0 12px; padding: 6px 10px; background-color: #f5f5f5; border-left: 3px solid #ff5252; text-align: left;`;
+      case 'h5':
+        return `font-size: 16px; font-weight: 600; color: #333; line-height: 1.5; margin: 20px 0 10px; text-align: left;`;
+      case 'h6':
+        return `font-size: 15px; font-weight: 500; color: #666; line-height: 1.5; margin: 18px 0 9px; text-align: left;`;
+
+      case 'p':
+        return `margin: 18px 0; line-height: 1.85; color: #1a1a1a;`;
+
+      case 'blockquote':
+        return `margin: 20px 0; padding: 12px 18px; background-color: #f5f5f5; border-left: 4px solid #d32f2f; color: #1a1a1a; font-size: 16px; line-height: 1.6; border-radius: 4px;`;
+
+      case 'pre':
+        return `margin: 24px 0; padding: 18px; background-color: #2a2a2a; color: #f5f5f5; border-radius: 6px; overflow-x: auto; line-height: 1.6; border-left: 4px solid #d32f2f; font-family: ${monoFont}; font-size: 15px;`;
+      case 'code':
+        return `font-family: ${monoFont}; font-size: 15px; padding: 3px 8px; background-color: #f5f5f5; color: #d32f2f; border-radius: 4px; font-weight: 500;`;
+
+      case 'ul':
+        return `margin: 20px 0; padding-left: 28px; list-style-type: disc;`;
+      case 'ol':
+        return `margin: 20px 0; padding-left: 28px; list-style-type: decimal;`;
+      case 'li':
+        return `margin: 10px 0; line-height: 1.8; color: #1a1a1a;`;
+      case 'li p':
+        return `margin: 0; padding: 0; line-height: 1.8;`;
+
+      case 'figure':
+        return `display: block; margin: 24px 0; text-align: center; border-radius: 6px; padding: 0;`;
+      case 'figcaption':
+        return `font-size: 14px; color: #999; text-align: center; margin-top: 8px;`;
+      case 'img':
+        return `display: block; margin: 0 auto; max-width: 100%; border-radius: 6px; border: 2px solid #d32f2f; box-shadow: 0 4px 12px rgba(211, 47, 47, 0.12);`;
+
+      case 'a':
+        return `color: #d32f2f; text-decoration: none; border-bottom: 1px solid #d32f2f;`;
+
+      case 'table':
+        return `width: 100%; margin: 24px 0; border-collapse: collapse; font-size: 16px; border-radius: 6px; overflow: hidden;`;
+      case 'th':
+        return `background-color: #d32f2f; color: #fff; padding: 10px 14px; text-align: left; font-weight: 600; border: none;`;
+      case 'td':
+        return `padding: 10px 14px; border: none; border-bottom: 1px solid #e0e0e0; color: #1a1a1a; background-color: #fff;`;
+      case 'thead':
+        return ``;
+
+      case 'hr':
+        return `margin: 36px auto; border: none; height: 2px; background: linear-gradient(to right, transparent, #d32f2f, transparent); max-width: 200px;`;
+
+      case 'strong':
+        return `font-weight: 700; color: #d32f2f; background-color: rgba(211, 47, 47, 0.08); padding: 2px 6px; border-radius: 3px;`;
+      case 'em':
+        return `font-style: italic; color: #666;`;
+      case 'del':
+        return `text-decoration: line-through; color: #999;`;
+
+      case 'avatar-header':
+        return `margin: 0 0 8px 0 !important; display: flex !important; align-items: center !important; justify-content: flex-start !important; width: 100%; flex-direction: row !important; flex-wrap: nowrap !important; text-align: left !important;`;
+      case 'avatar':
+        return `display: inline-block !important; vertical-align: middle !important; margin: 0 !important; width: 32px !important; height: 32px !important; border-radius: 50%; object-fit: cover; border: 1px solid #e0e0e0; flex-shrink: 0;`;
+      case 'avatar-caption':
+        return `display: inline-block !important; vertical-align: middle !important; font-size: 14px; color: #666; margin-left: 10px; line-height: 1.4; text-align: left !important;`;
+
+      default:
+        return '';
     }
   }
 
