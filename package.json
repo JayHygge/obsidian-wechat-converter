@@ -1,41 +1,41 @@
 {
-	"name": "obsidian-wechat-converter",
-	"version": "2.5.6",
-	"description": "Apple Style Formatter for Obsidian",
-	"main": "main.js",
-	"scripts": {
-		"generate:embedded": "node scripts/generate-embedded-deps.mjs",
-		"check:embedded": "node scripts/generate-embedded-deps.mjs --check",
-		"dev": "npm run generate:embedded && node esbuild.config.mjs",
-		"build": "npm run generate:embedded && node esbuild.config.mjs production",
-		"pretest": "npm run check:embedded",
-		"test": "vitest",
-		"test:coverage": "vitest run --coverage",
-		"release:pack": "bash package-release.sh",
-		"release:validate": "node scripts/release-validate.mjs",
-		"release:dryrun": "npm run build && npm run release:pack && npm run release:validate"
-	},
-	"keywords": [
-		"obsidian",
-		"plugin",
-		"apple",
-		"style",
-		"formatter"
-	],
-	"author": "林小卫很行 (DavidLam)",
-	"license": "MIT",
-	"devDependencies": {
-		"@types/node": "^16.11.6",
-		"@vitest/coverage-v8": "^4.0.18",
-		"builtin-modules": "^3.2.0",
-		"esbuild": "0.17.3",
-		"jsdom": "^28.0.0",
-		"obsidian": "latest",
-		"tslib": "2.4.0",
-		"typescript": "4.7.4",
-		"vitest": "^4.0.18"
-	},
-	"dependencies": {
-		"markdown-it-mathjax3": "^4.3.2"
-	}
+  "name": "obsidian-wechat-converter",
+  "version": "2.6.0",
+  "description": "Apple Style Formatter for Obsidian",
+  "main": "main.js",
+  "scripts": {
+    "generate:embedded": "node scripts/generate-embedded-deps.mjs",
+    "check:embedded": "node scripts/generate-embedded-deps.mjs --check",
+    "dev": "npm run generate:embedded && node esbuild.config.mjs",
+    "build": "npm run generate:embedded && node esbuild.config.mjs production",
+    "pretest": "npm run check:embedded",
+    "test": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "release:pack": "bash package-release.sh",
+    "release:validate": "node scripts/release-validate.mjs",
+    "release:dryrun": "npm run build && npm run release:pack && npm run release:validate"
+  },
+  "keywords": [
+    "obsidian",
+    "plugin",
+    "apple",
+    "style",
+    "formatter"
+  ],
+  "author": "林小卫很行 (DavidLam)",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^16.11.6",
+    "@vitest/coverage-v8": "^4.0.18",
+    "builtin-modules": "^3.2.0",
+    "esbuild": "0.17.3",
+    "jsdom": "^28.0.0",
+    "obsidian": "latest",
+    "tslib": "2.4.0",
+    "typescript": "4.7.4",
+    "vitest": "^4.0.18"
+  },
+  "dependencies": {
+    "markdown-it-mathjax3": "^4.3.2"
+  }
 }
