@@ -135,6 +135,21 @@
 
 > 说明：当前版本已支持标准三件套运行时，BRAT 更新路径与 Obsidian 插件标准发布方式一致。
 
+## 📥 从原版迁移指南 (Migration Guide)
+
+如果您之前使用的是 `obsidian-wechat-converter`，并希望保留原有配置（AppID、Secret、代理地址等）迁移到本插件，请按以下步骤操作：
+
+1.  **备份原数据**：
+    找到原插件的数据文件：`Vault/.obsidian/plugins/obsidian-wechat-converter/data.json`，将其复制到桌面。
+2.  **安装本插件**：
+    按照安装步骤安装并启用 `wechat-publisher-obsidian`。
+3.  **恢复数据**：
+    - 关闭 Obsidian。
+    - 将备份的 `data.json` 复制到本插件目录：`Vault/.obsidian/plugins/wechat-publisher-obsidian/`。
+4.  **重启插件**：
+    - 打开 Obsidian，本插件会自动检测旧版数据格式，并迁移到新版的多账号管理格式。
+    - ✅ **迁移完成**！您的所有文章状态、封面和账号信息都将保留。
+
 ## 📖 使用方法
 
 1. **唤起插件**
