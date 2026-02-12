@@ -1,5 +1,5 @@
 {
-  "name": "obsidian-wechat-converter",
+  "name": "wechat-publisher-obsidian",
   "version": "2.6.0",
   "description": "Apple Style Formatter for Obsidian",
   "main": "main.js",
@@ -22,7 +22,7 @@
     "style",
     "formatter"
   ],
-  "author": "林小卫很行 (DavidLam)",
+  "author": "JayHygge",
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^16.11.6",
@@ -37,5 +37,9 @@
   },
   "dependencies": {
     "markdown-it-mathjax3": "^4.3.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JayHygge/wechat-publisher-obsidian.git"
   }
 }

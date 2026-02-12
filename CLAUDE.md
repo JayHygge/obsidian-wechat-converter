@@ -41,7 +41,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Language**: JavaScript/TypeScript (mixed).
 - **External Dependencies**: `obsidian`, `electron`, and `@codemirror/*` packages are peer dependencies provided by the Obsidian app.
-- **UI/UX**: The plugin adds a ribbon icon and a command "Open Wechat Converter". It uses a side panel for live preview.
+- **UI/UX**: The plugin adds a ribbon icon and a command "Open WeChat Publisher". It uses a side panel for live preview.
 - **Image Handling**: Special attention is needed for local image paths (absolute/relative/WikiLink) and GIF handling (size limits).
 
 ## Best Practices & Lessons Learned (v2.1 Math Update & v2.5 Math-to-Image)

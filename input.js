@@ -418,7 +418,7 @@ class AppleStyleView extends ItemView {
   }
 
   getDisplayText() {
-    return '📝 微信排版转换';
+    return '📝 WeChat Publisher';
   }
 
   getIcon() {
@@ -426,7 +426,7 @@ class AppleStyleView extends ItemView {
   }
 
   async onOpen() {
-    console.log('🍎 转换器面板打开');
+    console.log('🍎 WeChat Publisher Panel Opened');
     const container = this.containerEl.children[1];
     container.empty();
     container.addClass('apple-converter-container');
@@ -717,7 +717,7 @@ class AppleStyleView extends ItemView {
 
     // 1.1 左侧：双层信息（插件名 + 文档名）
     this.currentDocLabel = toolbar.createEl('div', { cls: 'apple-toolbar-title' });
-    this.currentDocLabel.createDiv({ text: '微信公众号转换器', cls: 'apple-toolbar-plugin-name' });
+    this.currentDocLabel.createDiv({ text: 'WeChat Publisher', cls: 'apple-toolbar-plugin-name' });
     this.docTitleText = this.currentDocLabel.createDiv({ text: '未选择文档', cls: 'apple-toolbar-doc-name' });
 
     // 1.2 右侧：操作按钮组
@@ -2730,7 +2730,7 @@ class AppleStyleSettingTab extends PluginSettingTab {
  */
 class AppleStylePlugin extends Plugin {
   async onload() {
-    console.log('📝 正在加载微信公众号转换器...');
+    console.log('📝 Loading WeChat Publisher...');
 
     await this.loadSettings();
 
@@ -2739,13 +2739,13 @@ class AppleStylePlugin extends Plugin {
       (leaf) => new AppleStyleView(leaf, this)
     );
 
-    this.addRibbonIcon('wand', '📝 微信公众号转换器', async () => {
+    this.addRibbonIcon('wand', 'WeChat Publisher', async () => {
       await this.openConverter();
     });
 
     this.addCommand({
-      id: 'open-apple-converter',
-      name: '打开微信公众号转换器',
+      id: 'open-wechat-publisher',
+      name: 'Open WeChat Publisher',
       callback: async () => {
         await this.openConverter();
       },
@@ -2756,7 +2756,7 @@ class AppleStylePlugin extends Plugin {
 
     this.addSettingTab(new AppleStyleSettingTab(this.app, this));
 
-    console.log('✅ 微信公众号转换器加载完成');
+    console.log('✅ WeChat Publisher Loaded');
   }
 
   async openConverter() {

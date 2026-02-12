@@ -1,18 +1,15 @@
 
-# 📝 微信公众号排版转换器 (WeChat Converter)
+# 📝 WeChat Publisher (Obsidian Plugin)
 
 **让技术写作回归优雅与纯粹。**
 
-一款专为 Obsidian 打造的微信公众号排版增强插件。它不仅仅是一个转换工具，更是您内容创作流中的"数字化妆师"。我们解决了 Obsidian 到微信公众号排版的"最后一公里"问题，让您专注于内容创作，无需为繁琐的格式调整而分心。
+一款专为 Obsidian 打造的微信公众号发布工具。Markdown 转精美 HTML，支持一键同步到草稿箱，多账号管理。
 
-只需一键，即可将您的 Markdown 笔记转换为符合微信生态美学、阅读体验极佳的 HTML，无论是代码块、引用、列表还是本地图片，都能完美呈现。
-
-![Version](https://img.shields.io/badge/version-2.5.5-blue)
+![Version](https://img.shields.io/badge/version-2.6.0-blue)
 ![Obsidian](https://img.shields.io/badge/Obsidian-1.0.0+-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-
-> 本项目基于开源项目 [ai-writing-plugins](https://github.com/Ceeon/ai-writing-plugins) 进行深度重构与迭代开发。我们致力于打造 Obsidian 生态中体验最好的公众号排版工具。
+> 本项目 Fork 自 [obsidian-wechat-converter](https://github.com/DavidLam-oss/obsidian-wechat-converter)，在此基础上进行独立维护与功能增强。致力于打造 Obsidian 生态中体验最好的公众号发布工具。
 
 
 ## 💡 核心升级点 (Key Highlights)
@@ -117,7 +114,7 @@
 
 1. 从 [GitHub Releases](https://github.com/DavidLam-oss/obsidian-wechat-converter/releases) 下载最新的 `obsidian-wechat-converter.zip` 插件包。
 2. 解压并将其中的文件夹放入 Obsidian vault 的 `.obsidian/plugins/` 目录中。
-   > 最终路径应为：`.../.obsidian/plugins/obsidian-wechat-converter/`
+   > 最终路径应为：`.../.obsidian/plugins/wechat-publisher-obsidian/`
 3. 确保文件夹内至少包含以下文件（三件套运行时）：
    - `main.js`
    - `manifest.json`
@@ -286,7 +283,7 @@
 
 ## 👨‍💻 作者
 
-**林小卫很行 (DavidLam)**
+**JayHygge**
 
 一名热衷于提升生产力的开发者与内容创作者。
 如果您在使用过程中有任何问题、建议或发现了 Bug，欢迎随时在 GitHub Issue 区留言反馈。相信工具的力量，让创作更自由。

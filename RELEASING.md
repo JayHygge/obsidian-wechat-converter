@@ -18,7 +18,7 @@ This project now uses the standard Obsidian three-file runtime.
    - `git tag v2.5.5`
    - `git push origin v2.5.5`
 7. Create GitHub Release for that tag and upload:
-   - `obsidian-wechat-converter.zip`
+   - `wechat-publisher-obsidian.zip`
    - `main.js`
    - `manifest.json`
    - `styles.css`

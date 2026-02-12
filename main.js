@@ -3981,13 +3981,13 @@ var AppleStyleView = class extends ItemView {
     return APPLE_STYLE_VIEW;
   }
   getDisplayText() {
-    return "\u{1F4DD} \u5FAE\u4FE1\u6392\u7248\u8F6C\u6362";
+    return "\u{1F4DD} WeChat Publisher";
   }
   getIcon() {
     return "wand";
   }
   async onOpen() {
-    console.log("\u{1F34E} \u8F6C\u6362\u5668\u9762\u677F\u6253\u5F00");
+    console.log("\u{1F34E} WeChat Publisher Panel Opened");
     const container = this.containerEl.children[1];
     container.empty();
     container.addClass("apple-converter-container");
@@ -4191,7 +4191,7 @@ var AppleStyleView = class extends ItemView {
     const { setIcon } = require("obsidian");
     const toolbar = container.createEl("div", { cls: "apple-top-toolbar" });
     this.currentDocLabel = toolbar.createEl("div", { cls: "apple-toolbar-title" });
-    this.currentDocLabel.createDiv({ text: "\u5FAE\u4FE1\u516C\u4F17\u53F7\u8F6C\u6362\u5668", cls: "apple-toolbar-plugin-name" });
+    this.currentDocLabel.createDiv({ text: "WeChat Publisher", cls: "apple-toolbar-plugin-name" });
     this.docTitleText = this.currentDocLabel.createDiv({ text: "\u672A\u9009\u62E9\u6587\u6863", cls: "apple-toolbar-doc-name" });
     const actions = toolbar.createEl("div", { cls: "apple-toolbar-actions" });
     const createIconBtn = (icon, title, onClick) => {
@@ -5772,24 +5772,24 @@ var AppleStyleSettingTab = class extends PluginSettingTab {
 };
 var AppleStylePlugin = class extends Plugin {
   async onload() {
-    console.log("\u{1F4DD} \u6B63\u5728\u52A0\u8F7D\u5FAE\u4FE1\u516C\u4F17\u53F7\u8F6C\u6362\u5668...");
+    console.log("\u{1F4DD} Loading WeChat Publisher...");
     await this.loadSettings();
     this.registerView(
       APPLE_STYLE_VIEW,
       (leaf) => new AppleStyleView(leaf, this)
     );
-    this.addRibbonIcon("wand", "\u{1F4DD} \u5FAE\u4FE1\u516C\u4F17\u53F7\u8F6C\u6362\u5668", async () => {
+    this.addRibbonIcon("wand", "WeChat Publisher", async () => {
       await this.openConverter();
     });
     this.addCommand({
-      id: "open-apple-converter",
-      name: "\u6253\u5F00\u5FAE\u4FE1\u516C\u4F17\u53F7\u8F6C\u6362\u5668",
+      id: "open-wechat-publisher",
+      name: "Open WeChat Publisher",
       callback: async () => {
         await this.openConverter();
       }
     });
     this.addSettingTab(new AppleStyleSettingTab(this.app, this));
-    console.log("\u2705 \u5FAE\u4FE1\u516C\u4F17\u53F7\u8F6C\u6362\u5668\u52A0\u8F7D\u5B8C\u6210");
+    console.log("\u2705 WeChat Publisher Loaded");
   }
   async openConverter() {
     let leaf = this.app.workspace.getLeavesOfType(APPLE_STYLE_VIEW)[0];
