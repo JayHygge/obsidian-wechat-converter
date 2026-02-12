@@ -76,7 +76,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            obsidian-wechat-converter.zip
+            wechat-publisher-obsidian.zip
             main.js
             manifest.json
             styles.css
