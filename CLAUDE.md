@@ -79,7 +79,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 When bumping the version (e.g., v2.3.2 -> v2.3.3), ensure **ALL** of the following files are updated:
 
 1.  **`package.json`**: Update `"version": "..."`.
-2.  **`manifest.json`**: Update `"version": "..."`.
+    > **Note:** `manifest.json` will be automatically synced from `package.json` during build.
+2.  **`versions.json`**: Add new mapping if needed.
 3.  **`README.md`**:
     -   **Update Badge**: Update the URL in `![Version](https://img.shields.io/badge/version-X.X.X-blue)`. **(Crucial: Don't miss this!)**
     -   **Update Logs**: Add a new entry in the `Update Logs` section describing the changes.
