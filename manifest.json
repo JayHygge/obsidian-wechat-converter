@@ -3,7 +3,7 @@
   "name": "WeChat Publisher",
   "version": "2.6.0",
   "minAppVersion": "0.15.0",
-  "description": "Publish Obsidian notes to WeChat Official Account with one click. Supports MathJax, local images, and custom styling.",
+  "description": "Apple Style Formatter for Obsidian",
   "author": "JayHygge",
   "authorUrl": "https://github.com/JayHygge/wechat-publisher-obsidian",
   "isDesktopOnly": false
