@@ -267,6 +267,22 @@
    ```
 
 
+## 🔐 安全与隐私 (Security & Privacy)
+
+本插件遵循 **"Your Data, Your Control"** 的设计哲学。
+
+1.  **数据本地存储**：
+    - 您的所有敏感信息（包括 `AppID`, `AppSecret`）均**仅存储在您本地**的 `data.json` 文件中。
+    - 插件**不会**将您的密钥上传到任何第三方服务器（除了用于微信接口调用的 Cloudflare 代理，该代理仅作转发，不存储数据）。
+
+2.  **Git 版本控制警告**：
+    - 如果您使用 Git 备份 Obsidian 仓库，**请务必将 `data.json` 加入 `.gitignore`**。
+    - ⚠️ **切勿**将包含 `AppSecret` 的 `data.json` 提交到公开仓库 (Public Repo)，否则会导致您的公众号被盗用。
+
+3.  **代理服务安全**：
+    - 既然选择了 Cloudflare Worker 方案，建议您**自行部署**（免费且简单）。
+    - 使用他人提供的代理服务意味着您的密钥会经过他人的服务器，存在理论上的中间人风险。本插件提供的部署代码是透明开源的，保障您的知情权。
+
 ## 🤝 贡献 (Contributing)
 
 欢迎提交 Issue 或 Pull Request！

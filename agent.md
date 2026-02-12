@@ -53,6 +53,9 @@ We rigorously enforce a **Single Source of Truth** architecture to minimize main
 *   **WeChat Compatibility**:
     *   No external CSS files allowed in output HTML (inline styles only).
     *   MathJax must be converted to Images/SVG to bypass WeChat content filters.
+*   **Security & Privacy**:
+    *   **Input Masking**: `AppSecret` and other sensitive fields MUST use `type="password"` in Settings UI.
+    *   **Data Isolation**: User secrets (AppSecret) stay in `data.json`. Do NOT implement features that upload `data.json` to any server.
 *   **Testing**:
     *   Unit Tests: `npm test` (Vitest).
     *   Visual Tests: Use `TEST.md` cases in Obsidian Live Preview.
