@@ -17,7 +17,8 @@
     "test:coverage": "vitest run --coverage",
     "release:pack": "node scripts/release.mjs",
     "release:validate": "node scripts/release-validate.mjs",
-    "release:dryrun": "npm run build && npm run release:pack && npm run release:validate"
+    "release:dryrun": "npm run build && npm run release:pack && npm run release:validate",
+    "deploy:dev": "node scripts/dev-deploy.mjs"
   },
   "keywords": [
     "obsidian",

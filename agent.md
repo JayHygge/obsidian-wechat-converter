@@ -37,6 +37,9 @@ We rigorously enforce a **Single Source of Truth** architecture to minimize main
 *   `npm run release:dryrun`: **Full Validation Cycle**.
     *   Runs `build` -> `release:pack` -> `release:validate`.
     *   Use this before submitting code.
+*   `npm run deploy:dev`: **Local Deployment**.
+    *   Builds and copies plugin files to the local Google Drive Vault.
+    *   Auto-migrates `data.json` from legacy plugin if needed.
 
 ## 4. Key Components
 
