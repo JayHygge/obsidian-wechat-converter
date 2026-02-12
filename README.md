@@ -112,7 +112,7 @@
 
 ## 🚀 安装
 
-1. 从 [GitHub Releases](https://github.com/DavidLam-oss/obsidian-wechat-converter/releases) 下载最新的 `obsidian-wechat-converter.zip` 插件包。
+1. 从 [GitHub Releases](https://github.com/JayHygge/wechat-publisher-obsidian/releases) 下载最新的 `wechat-publisher-obsidian.zip` 插件包。
 2. 解压并将其中的文件夹放入 Obsidian vault 的 `.obsidian/plugins/` 目录中。
    > 最终路径应为：`.../.obsidian/plugins/wechat-publisher-obsidian/`
 3. 确保文件夹内至少包含以下文件（三件套运行时）：
@@ -126,7 +126,7 @@
 如果你使用 BRAT 管理插件更新：
 
 1. 安装并启用 BRAT 插件。
-2. 在 BRAT 中添加仓库：`DavidLam-oss/obsidian-wechat-converter`。
+2. 在 BRAT 中添加仓库：`JayHygge/wechat-publisher-obsidian`。
 3. 安装后执行一次冒烟检查：
    - 打开转换面板
    - 预览渲染
@@ -138,8 +138,8 @@
 ## 📖 使用方法
 
 1. **唤起插件**
-   - 点击 Obsidian 左侧边栏的 🪄 图标 (WeChat Converter)。
-   - 或使用命令面板 (`Cmd/Ctrl + P`) 搜索并执行 "Open Wechat Converter"。
+   - 点击 Obsidian 左侧边栏的 🪄 图标 (WeChat Publisher)。
+   - 或使用命令面板 (`Cmd/Ctrl + P`) 搜索并执行 "Open WeChat Publisher"。
 
 2. **预览与调整**
    - 插件会自动加载当前激活的笔记内容。
